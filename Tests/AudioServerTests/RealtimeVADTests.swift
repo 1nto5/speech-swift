@@ -4,18 +4,20 @@ import XCTest
 
 final class RealtimeVADTests: XCTestCase {
     func testWebSocketAutomaticallyCommitsAfterVADEndpoint() async throws {
-        let port = 19_389
+        let port = 19_391
         let vad = ScriptedVAD(
             sampleRate: 24_000,
             chunkSize: 6_000,
             probabilities: [0, 0.8, 0.8, 0.8, 0.1, 0.1])
-        let server = AudioServer(
-            host: "127.0.0.1",
-            port: port,
-            realtimeState: FailingRealtimeModelLoading(vadOverride: vad))
-        let serverTask = Task { try await server.run() }
-        defer { serverTask.cancel() }
-        try await Task.sleep(nanoseconds: 500_000_000)
+        let fixture = TestAudioServer(port: port) {
+            let server = AudioServer(
+                host: "127.0.0.1",
+                port: port,
+                realtimeState: FailingRealtimeModelLoading(vadOverride: vad))
+            try await server.run()
+        }
+        addTeardownBlock { await fixture.stop() }
+        try await fixture.start()
 
         let socket = URLSession.shared.webSocketTask(
             with: URL(string: "ws://127.0.0.1:\(port)/v1/realtime")!)

@@ -32,3 +32,22 @@ python3 scripts/test_build_mlx_metallib.py
 CI runs this test before building Swift. It checks target flags, cache hits and
 invalidation, preservation after compilation and partial-link failures, and
 recovery on the next successful build.
+
+## Audio server tests
+
+The HTTP and realtime WebSocket tests use `TestAudioServer` to poll `/health`
+before connecting, with a 10-second startup deadline. Startup errors propagate
+to test setup, and teardown cancels and awaits the server task before releasing
+its port. Tests use separate ports to avoid connecting to another test's server.
+
+After building the debug tests, run the server regression suite without model
+downloads:
+
+```sh
+swift test --skip-build --no-parallel --filter AudioServerTests --skip E2E
+```
+
+This covers delayed listener startup, startup failures, readiness timeouts,
+cancelled setup, premature server exit, shutdown before port reuse, and realtime
+protocol behavior. The model-backed `E2E` server suites run separately with
+`scripts/test_e2e_isolated.sh`.
