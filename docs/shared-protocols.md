@@ -72,11 +72,17 @@ public protocol SpeechRecognitionModel: AnyObject {
 
 The `transcribeWithLanguage` method has a default implementation that delegates to `transcribe()` with no language detection. Models that detect language (e.g. ParakeetASR via `NLLanguageRecognizer`) override it to return `TranscriptionResult` with a detected language — used by the voice pipeline to forward language to TTS.
 
-**Conforming types:** `Qwen3ASRModel`, `ParakeetASRModel`, `ParakeetStreamingASRModel`, `NemotronStreamingASRModel`, `OmnilingualASRModel` (CoreML), `OmnilingualASRMLXModel` (MLX)
+**Conforming types:** `Qwen3ASRModel`, `ParakeetASRModel`, `ParakeetStreamingASRModel`, `NemotronStreamingASRModel`, `OmnilingualASRModel` (CoreML), `OmnilingualASRMLXModel` (MLX), `KyutaiSTTModel` (MLX)
 
 `ParakeetStreamingASRModel` additionally exposes streaming APIs — `createSession()` for long-lived streaming with cache state, `transcribeStream(audio:sampleRate:)` for chunked AsyncSequence output, and per-session `pushAudio` / `forceEndOfUtterance` / `finalize` for fine-grained VAD-driven pipelines. The batch `transcribe` entry point runs internal chunking and remains protocol-compatible.
 
 `NemotronStreamingASRModel` exposes the same shape of streaming APIs (`createSession()`, `transcribeStream`, `pushAudio`, `finalize`) minus `forceEndOfUtterance` — Nemotron has no explicit EOU head, so segmentation is driven by the caller (external VAD or punctuation-boundary heuristic) calling `finalize()` directly.
+
+`KyutaiSTTModel` implements this protocol for native MLX delayed-stream ASR.
+Its throwing `transcribe(audio:sampleRate:)` overload reports validation errors;
+`makeSession()` provides incremental 24 kHz PCM input. Language hints do not
+condition the model. `KyutaiSTTVariant` selects FP16, INT4, or the default INT8
+bundle. See [Kyutai STT inference](inference/kyutai-stt.md).
 
 ### StreamingRecognitionModel and StreamingRecognitionSession
 
@@ -100,11 +106,15 @@ for update in try session.finish() {
 }
 ```
 
-`ParakeetStreamingASRModel`, `NemotronStreamingASRModel`, and
-`NemotronStreamingASRMLXModel` conform. `StreamingRecognitionUpdate` preserves
+`ParakeetStreamingASRModel`, `NemotronStreamingASRModel`,
+`NemotronStreamingASRMLXModel`, and `KyutaiSTTModel` conform. `StreamingRecognitionUpdate` preserves
 the shared text, final/EOU state, segment index, confidence, language, optional
 segment bounds, and word timings. Inputs must already use the session's
 `inputSampleRate`; capture and file sources can resample before delivery.
+
+Kyutai sessions consume 24 kHz audio and emit cumulative text for segment zero.
+Call `finish()` to flush delayed words and receive a final update; repeated calls
+return no updates. Kyutai has no end-of-utterance head and ignores language hints.
 
 ### ForcedAlignmentModel
 

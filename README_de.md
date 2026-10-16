@@ -42,6 +42,7 @@ Spracherkennung, -synthese und -verständnis auf dem Gerät für Mac und iOS. L�
 - **[Parakeet TDT](https://soniqo.audio/de/guides/parakeet)** — Sprache-zu-Text über CoreML (Neural Engine, NVIDIA FastConformer + TDT-Decoder, 25 Sprachen)
 - **[Omnilingual ASR](https://soniqo.audio/de/guides/omnilingual)** — Sprache-zu-Text (Meta wav2vec2 + CTC, **1.672 Sprachen** in 32 Schriften, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/de/guides/cohere-transcribe)** — Native MLX-Sprache-zu-Text-Erkennung (14 Sprachen, FP16/INT5/INT8)
+- **[Kyutai STT](https://soniqo.audio/de/guides/kyutai-stt)** — Natives MLX für Streaming-Spracherkennung (1B Englisch/Französisch; 2.6B-Konfiguration für Englisch; Mimi mit 24 kHz; FP16/INT4/INT8-Exporte) · [INT8](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-8bit) (Standard) · [INT4](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-4bit) · [FP16](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-FP16)
 - **[Voxtral Mini 3B](https://soniqo.audio/de/guides/voxtral)** — Native MLX-Sprache-zu-Text-Erkennung (8 Sprachen, FP16/INT5/INT8) — RTF 0,074 auf M5 Pro
 - **[Streaming-Diktat](https://soniqo.audio/de/guides/dictate)** — Echtzeit-Diktat mit Teilergebnissen und Äußerungsende-Erkennung (Parakeet-EOU-120M)
 - **[Nemotron Streaming (Mehrsprachig)](https://soniqo.audio/de/guides/nemotron)** — Streaming-ASR mit geringer Latenz, nativer Interpunktion und Großschreibung (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 Sprach-Lokalisierungen**)
@@ -169,7 +170,7 @@ struct DictateView: View {
 
 `SpeechUI` liefert nur `TranscriptionView` (finale + partielle Ergebnisse) und `TranscriptionStore` (Streaming-ASR-Adapter). Verwende AVFoundation für Audio-Visualisierung und Wiedergabe.
 
-Verfügbare SPM-Produkte: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+Verfügbare SPM-Produkte: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `KyutaiSTT`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## Modelle
 
@@ -186,6 +187,7 @@ Kompakte Übersicht unten. **[Vollständiger Modellkatalog mit Größen, Quantis
 | [Nemotron Streaming (Englisch)](https://soniqo.audio/guides/nemotron) | Sprache → Text (Streaming, mit Interpunktion) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/de/guides/omnilingual) | Sprache → Text | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1.672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Cohere Transcribe 2B](https://soniqo.audio/de/guides/cohere-transcribe) | Sprache → Text | MLX | 2B (FP16 / INT5 / INT8) | 14 |
+| [Kyutai STT](docs/models/kyutai-stt.md) | Sprache → Text (Streaming) | MLX | 1B (FP16 / INT4 / INT8) | EN/FR |
 | [Voxtral Mini 3B](https://soniqo.audio/de/guides/voxtral) | Sprache → Text | MLX | 3B (FP16 / INT5 / INT8) | 8 |
 | [Qwen3-ForcedAligner](https://soniqo.audio/de/guides/align) | Audio + Text → Zeitstempel | MLX, CoreML | 0.6B | Multi |
 | [Qwen3-TTS](https://soniqo.audio/de/guides/speak) | Text → Sprache | MLX, CoreML | 0.6B, 1.7B | 10 |

@@ -64,6 +64,7 @@ let package = Package(
             name: "IndexTTS2TTS",
             targets: ["IndexTTS2TTS"]
         ),
+        .library(name: "KyutaiSTT", targets: ["KyutaiSTT"]),
         .library(
             name: "PersonaPlex",
             targets: ["PersonaPlex"]
@@ -442,6 +443,14 @@ let package = Package(
             ]
         ),
         .target(
+            name: "KyutaiSTT",
+            dependencies: [
+                "AudioCommon", "PersonaPlex",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+            ]
+        ),
+        .target(
             name: "PersonaPlex",
             dependencies: [
                 "AudioCommon",
@@ -777,6 +786,7 @@ let package = Package(
             name: "AudioCLILib",
             dependencies: [
                 "CohereTranscribeASR",
+                "KyutaiSTT",
                 "Qwen3ASR",
                 "Qwen3TTS",
                 "CosyVoiceTTS",
@@ -830,6 +840,7 @@ let package = Package(
             name: "AsrBenchmark",
             dependencies: [
                 "AudioCommon",
+                "KyutaiSTT",
                 "CohereTranscribeASR",
                 "Qwen3ASR",
                 "ParakeetASR",
@@ -838,6 +849,7 @@ let package = Package(
                 "WhisperASR",
                 "VoxtralASR",
                 "MossTranscribe",
+                .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
@@ -959,6 +971,14 @@ let package = Package(
         .testTarget(
             name: "VoiceChatBenchmarkTests",
             dependencies: ["VoiceChatBenchmark"]
+        ),
+        .testTarget(
+            name: "KyutaiSTTTests",
+            dependencies: ["KyutaiSTT", "AudioCommon", "PersonaPlex", "KokoroTTS"]
+        ),
+        .testTarget(
+            name: "AsrBenchmarkTests",
+            dependencies: ["AsrBenchmark"]
         ),
         .testTarget(
             name: "CohereTranscribeASRTests",

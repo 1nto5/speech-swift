@@ -42,6 +42,7 @@ Speech Swift पैकेज के सत्यापन योग्य सं
 - **[Parakeet TDT](https://soniqo.audio/hi/guides/parakeet)** — CoreML के माध्यम से स्पीच-टू-टेक्स्ट (Neural Engine, NVIDIA FastConformer + TDT decoder, 25 भाषाएँ)
 - **[Omnilingual ASR](https://soniqo.audio/hi/guides/omnilingual)** — स्पीच-टू-टेक्स्ट (Meta wav2vec2 + CTC, **1,672 भाषाएँ** 32 लिपियों में, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/hi/guides/cohere-transcribe)** — नेटिव MLX स्पीच-टू-टेक्स्ट (14 भाषाएँ, FP16/INT5/INT8)
+- **[Kyutai STT](https://soniqo.audio/hi/guides/kyutai-stt)** — नेटिव MLX स्ट्रीमिंग वाक् पहचान (1B अंग्रेज़ी/फ़्रेंच; 2.6B अंग्रेज़ी कॉन्फ़िगरेशन; 24 kHz Mimi; FP16/INT4/INT8 एक्सपोर्ट) · [INT8](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-8bit) (डिफ़ॉल्ट) · [INT4](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-4bit) · [FP16](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-FP16)
 - **[Voxtral Mini 3B](https://soniqo.audio/hi/guides/voxtral)** — नेटिव MLX स्पीच-टू-टेक्स्ट (8 भाषाएँ, FP16/INT5/INT8) — M5 Pro पर RTF 0.074
 - **[Streaming Dictation](https://soniqo.audio/hi/guides/dictate)** — पार्शियल्स और एंड-ऑफ-अटरन्स डिटेक्शन के साथ रियल-टाइम डिक्टेशन (Parakeet-EOU-120M)
 - **[Nemotron Streaming (बहुभाषी)](https://soniqo.audio/hi/guides/nemotron)** — नेटिव विराम चिह्न और कैपिटलाइज़ेशन के साथ लो-लेटेंसी स्ट्रीमिंग ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 भाषा-लोकेल**)
@@ -169,7 +170,7 @@ struct DictateView: View {
 
 `SpeechUI` केवल `TranscriptionView` (finals + partials) और `TranscriptionStore` (स्ट्रीमिंग ASR एडाप्टर) प्रदान करता है। ऑडियो विज़ुअलाइज़ेशन और प्लेबैक के लिए AVFoundation का उपयोग करें।
 
-उपलब्ध SPM उत्पाद: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+उपलब्ध SPM उत्पाद: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `KyutaiSTT`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## मॉडल
 
@@ -186,6 +187,7 @@ struct DictateView: View {
 | [Nemotron Streaming (अंग्रेज़ी)](https://soniqo.audio/guides/nemotron) | भाषण → टेक्स्ट (स्ट्रीमिंग, विराम चिह्नों के साथ) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/hi/guides/omnilingual) | स्पीच → टेक्स्ट | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1,672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Cohere Transcribe 2B](https://soniqo.audio/hi/guides/cohere-transcribe) | स्पीच → टेक्स्ट | MLX | 2B (FP16 / INT5 / INT8) | 14 |
+| [Kyutai STT](docs/models/kyutai-stt.md) | स्पीच → टेक्स्ट (स्ट्रीमिंग) | MLX | 1B (FP16 / INT4 / INT8) | EN/FR |
 | [Voxtral Mini 3B](https://soniqo.audio/hi/guides/voxtral) | स्पीच → टेक्स्ट | MLX | 3B (FP16 / INT5 / INT8) | 8 |
 | [Qwen3-ForcedAligner](https://soniqo.audio/hi/guides/align) | ऑडियो + टेक्स्ट → टाइमस्टैम्प | MLX, CoreML | 0.6B | बहुभाषी |
 | [Qwen3-TTS](https://soniqo.audio/hi/guides/speak) | टेक्स्ट → स्पीच | MLX, CoreML | 0.6B, 1.7B | 10 |

@@ -42,6 +42,7 @@ Speech Swift パッケージへの参照を公開ソースで確認できる 16 
 - **[Parakeet TDT](https://soniqo.audio/ja/guides/parakeet)** — CoreMLによる音声認識（Neural Engine、NVIDIA FastConformer + TDTデコーダー、25言語）
 - **[Omnilingual ASR](https://soniqo.audio/ja/guides/omnilingual)** — 音声認識（Meta wav2vec2 + CTC、**1,672言語**、32文字体系、CoreML 300M + MLX 300M/1B/3B/7B）
 - **[Cohere Transcribe 2B](https://soniqo.audio/ja/guides/cohere-transcribe)** — ネイティブ MLX 音声認識（14言語、FP16/INT5/INT8）
+- **[Kyutai STT](https://soniqo.audio/ja/guides/kyutai-stt)** — ネイティブ MLX ストリーミング音声認識（1B 英語・フランス語、2.6B 英語構成、24 kHz Mimi、FP16/INT4/INT8 エクスポート） · [INT8](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-8bit) (標準) · [INT4](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-4bit) · [FP16](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-FP16)
 - **[Voxtral Mini 3B](https://soniqo.audio/ja/guides/voxtral)** — ネイティブ MLX 音声認識（8言語、FP16/INT5/INT8）— M5 Pro で RTF 0.074
 - **[ストリーミングディクテーション](https://soniqo.audio/ja/guides/dictate)** — 部分結果と発話終端検出付きのリアルタイムディクテーション（Parakeet-EOU-120M）
 - **[Nemotron ストリーミング (多言語)](https://soniqo.audio/ja/guides/nemotron)** — ネイティブな句読点と大文字化を備えた低レイテンシストリーミングASR（NVIDIA Nemotron-3.5-ASR-Streaming-0.6B、CoreML + MLX、**40言語ロケール**）
@@ -169,7 +170,7 @@ struct DictateView: View {
 
 `SpeechUI` には `TranscriptionView`（確定 + 部分）と `TranscriptionStore`（ストリーミングASRアダプター）のみが含まれます。音声の可視化や再生には AVFoundation をお使いください。
 
-利用可能なSPMプロダクト：`Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`。
+利用可能なSPMプロダクト：`Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `KyutaiSTT`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`。
 
 ## モデル
 
@@ -186,6 +187,7 @@ struct DictateView: View {
 | [Nemotron Streaming (英語)](https://soniqo.audio/guides/nemotron) | 音声 → テキスト（ストリーミング、句読点付き） | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/ja/guides/omnilingual) | 音声 → テキスト | CoreML (ANE)、MLX | 300M / 1B / 3B / 7B | **[1,672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Cohere Transcribe 2B](https://soniqo.audio/ja/guides/cohere-transcribe) | 音声 → テキスト | MLX | 2B (FP16 / INT5 / INT8) | 14 |
+| [Kyutai STT](docs/models/kyutai-stt.md) | 音声 → テキスト（ストリーミング） | MLX | 1B (FP16 / INT4 / INT8) | EN/FR |
 | [Voxtral Mini 3B](https://soniqo.audio/ja/guides/voxtral) | 音声 → テキスト | MLX | 3B (FP16 / INT5 / INT8) | 8 |
 | [Qwen3-ForcedAligner](https://soniqo.audio/ja/guides/align) | 音声 + テキスト → タイムスタンプ | MLX、CoreML | 0.6B | 多言語 |
 | [Qwen3-TTS](https://soniqo.audio/ja/guides/speak) | テキスト → 音声 | MLX、CoreML | 0.6B、1.7B | 10 |

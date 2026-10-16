@@ -42,6 +42,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — Chuyển giọng nói thành văn bản qua CoreML (Neural Engine, NVIDIA FastConformer + bộ giải mã TDT, 25 ngôn ngữ)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — Chuyển giọng nói thành văn bản (Meta wav2vec2 + CTC, **1.672 ngôn ngữ** trên 32 hệ chữ viết, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/vi/guides/cohere-transcribe)** — Chuyển giọng nói thành văn bản bằng MLX gốc (14 ngôn ngữ, FP16/INT5/INT8)
+- **[Kyutai STT](https://soniqo.audio/vi/guides/kyutai-stt)** — Nhận dạng giọng nói trực tuyến bằng MLX gốc (1B tiếng Anh/Pháp; cấu hình 2.6B tiếng Anh; Mimi 24 kHz; xuất FP16/INT4/INT8) · [INT8](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-8bit) (mặc định) · [INT4](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-4bit) · [FP16](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-FP16)
 - **[Voxtral Mini 3B](https://soniqo.audio/vi/guides/voxtral)** — Chuyển giọng nói thành văn bản bằng MLX gốc (8 ngôn ngữ, FP16/INT5/INT8) — RTF 0,074 trên M5 Pro
 - **[Đọc chính tả streaming](https://soniqo.audio/guides/dictate)** — Đọc chính tả thời gian thực với kết quả tạm thời và phát hiện kết thúc phát ngôn (Parakeet-EOU-120M)
 - **[Nemotron Streaming (Đa ngôn ngữ)](https://soniqo.audio/guides/nemotron)** — ASR streaming độ trễ thấp với dấu câu và viết hoa tự nhiên (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 ngôn ngữ-khu vực**)
@@ -169,7 +170,7 @@ struct DictateView: View {
 
 `SpeechUI` chỉ cung cấp `TranscriptionView` (kết quả cuối + tạm thời) và `TranscriptionStore` (adapter ASR streaming). Hãy dùng AVFoundation để hiển thị trực quan và phát lại âm thanh.
 
-Các sản phẩm SPM có sẵn: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+Các sản phẩm SPM có sẵn: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `KyutaiSTT`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## Mô hình
 
@@ -186,6 +187,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Nemotron Streaming (Tiếng Anh)](https://soniqo.audio/guides/nemotron) | Giọng nói → Văn bản (streaming, có dấu câu) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/guides/omnilingual) | Giọng nói → Văn bản | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1.672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Cohere Transcribe 2B](https://soniqo.audio/vi/guides/cohere-transcribe) | Giọng nói → Văn bản | MLX | 2B (FP16 / INT5 / INT8) | 14 |
+| [Kyutai STT](docs/models/kyutai-stt.md) | Giọng nói → Văn bản (streaming) | MLX | 1B (FP16 / INT4 / INT8) | EN/FR |
 | [Voxtral Mini 3B](https://soniqo.audio/vi/guides/voxtral) | Giọng nói → Văn bản | MLX | 3B (FP16 / INT5 / INT8) | 8 |
 | [Qwen3-ForcedAligner](https://soniqo.audio/guides/align) | Audio + Văn bản → Dấu thời gian | MLX, CoreML | 0.6B | Đa ngôn ngữ |
 | [Qwen3-TTS](https://soniqo.audio/guides/speak) | Văn bản → Giọng nói | MLX, CoreML | 0.6B, 1.7B | 10 |
