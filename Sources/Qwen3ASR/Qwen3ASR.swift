@@ -1362,10 +1362,12 @@ public extension Qwen3ASRModel {
         progressHandler?(0.80, "Loading tokenizer...")
 
         // Create model with appropriate config for detected size and bits
-        let model = Qwen3ASRModel(
-            audioConfig: modelSize.audioConfig,
-            textConfig: modelSize.textConfig(bits: detectedBits)
-        )
+        let model = withThrowawayRandomState {
+            Qwen3ASRModel(
+                audioConfig: modelSize.audioConfig,
+                textConfig: modelSize.textConfig(bits: detectedBits)
+            )
+        }
 
         // Load tokenizer from vocab.json
         let vocabPath = cacheDir.appendingPathComponent("vocab.json")

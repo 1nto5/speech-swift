@@ -252,7 +252,7 @@ public final class SileroVADModel {
 
             progressHandler?(0.8, "Loading model...")
 
-            let network = SileroVADNetwork()
+            let network = withThrowawayRandomState { SileroVADNetwork() }
             try SileroWeightLoader.loadWeights(model: network, from: cacheDir)
 
             progressHandler?(1.0, "Ready")
