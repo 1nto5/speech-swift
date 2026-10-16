@@ -1,16 +1,18 @@
 # Kyutai STT benchmark and validation — 2026-10-15–16
 
-Validated the 1B English/French checkpoint and all three exports on Apple M5 Pro, 48 GB, macOS 26.6.2. Corpus accuracy uses a Swift release build with compiled MLX Metal resources. Each language/precision ran in sequential batches of ten clips, with a fresh process and first-clip warmup per batch and a 256 MiB MLX cache limit. Clip errors are summed across all 80 clips before WER division. INT8 is the default; the tables show the accuracy, speed and memory tradeoffs rather than treating quantization as lossless.
+Validated the 1B English/French checkpoint and all three exports on Apple M5 Pro, 48 GB, macOS 26.6.2. Corpus accuracy uses a Swift release build with compiled MLX Metal resources. Each language/precision ran in sequential batches of ten clips, with a fresh process and first-clip warmup per batch and a 256 MiB MLX cache limit. Clip errors are summed across all 80 clips before WER division. INT8 is the default. The tables report accuracy, speed and memory across precisions.
 
 ## Corpus accuracy
 
 The fixed [FLEURS](https://huggingface.co/datasets/google/fleurs) subset contains 80 English clips (753.14 s) and 80 French clips (849.30 s), selected as the first 80 test rows per language in parquet order at revision `168de341b3db6859a9bac1c50a2ef5e3b47647e0`. FLOAT WAV preserves the original decoded samples and levels. These are subset results, not full-test leaderboard scores. Both references and hypotheses use speech-swift's existing normalizer: lowercase, punctuation removal and common English contractions, with no general spoken-number normalization. Empty transcripts count as deletions.
 
-| Precision | English WER ↓ | French WER ↓ |
-|---|---:|---:|
-| FP16 | 24.03% | 16.44% |
-| INT8 | 23.91% | 16.54% |
-| INT4 | 24.56% | 17.23% |
+| Precision | English WER ↓ | Change, pp | French WER ↓ | Change, pp |
+|---|---:|---:|---:|---:|
+| FP16 | 23.85% | -0.18 | 16.44% | +0.00 |
+| INT8 | 23.74% | -0.18 | 17.13% | +0.60 |
+| INT4 | 24.03% | -0.53 | 17.23% | +0.00 |
+
+Changes compare the earlier release build with the current build on `main` base `511307a` (runtime source `f9a3e0a`). The current Metal library uses Metal 3.2 and the macOS 15 deployment target. Dataset files, weights and scoring are unchanged; the cause of individual transcript changes has not been isolated. Lower WER is better: the default INT8 English score improved, while French increased by 0.60 percentage points. Changed transcripts out of 160: FP16 6, INT8 9, INT4 10.
 
 Corrected corpus runs check accuracy. Speech models and builds remain sequential, but non-model rendering may overlap. Corpus timing fields are retained as diagnostics and are not used as isolated performance measurements. The performance and latency profiles below were measured separately, without observed competing heavy work.
 
@@ -32,13 +34,17 @@ The encoder must process its two 25 Hz frames together before downsampling. Corr
 
 ## CLI default-cache profiles
 
-These earlier profiles use PCM16 copies of the first eight English and eight French clips (157.7 s) with the 256 MiB free-buffer cache limit. Each precision preserves all 16 transcripts from its corresponding full-Mimi baseline. Accuracy in this table is for that mixed 16-clip selection; the corpus table above uses 80 clips per language. The model API leaves the global cache policy to its caller.
+These current-build profiles use PCM16 copies of the first eight English and eight French clips (157.7 s) with the 256 MiB reusable-buffer cache limit. The INT8 profile preserves all 16 transcripts from the earlier build. FP16 and INT4 each change one transcript. Accuracy here is for that mixed 16-clip selection; use the Float32 corpus table for the 80-clip-per-language accuracy comparison. Model APIs leave the global cache policy to the caller.
+
+A slower post-restart run is retained only as a diagnostic: subsequent sampling found active indexing and browser GPU work. Accepted profiles began after three baseline GPU samples at or below 3%; observed competing work caused retries.
 
 | Precision | Profile WER ↓ | RTF ↓ | Throughput ×RT ↑ | Peak RSS MiB | Peak physical footprint MiB |
 |---|---:|---:|---:|---:|---:|
-| FP16 | 16.49% | 0.166 | 6.03 | 2183 | 2675 |
-| INT8 | 15.72% | 0.131 | 7.62 | 1449 | 1947 |
-| INT4 | 19.59% | 0.105 | 9.54 | 1058 | 1554 |
+| FP16 | 17.78% | 0.172 | 5.82 | 2185 | 2678 |
+| INT8 | 15.72% | 0.130 | 7.72 | 1452 | 1951 |
+| INT4 | 19.33% | 0.110 | 9.12 | 1060 | 1556 |
+
+Throughput change versus the earlier build: FP16 -3.4%, INT8 +1.3%, INT4 -4.5%. Each is a single pass; these differences do not establish a statistically significant speed regression or improvement.
 
 
 ## Isolated CLI latency profile
@@ -49,13 +55,13 @@ Frame p95 is the median of the per-clip percentiles, for 80 ms audio frames.
 
 | Precision | First text compute ms | Input consumed s | Frame p95 ms | Final flush ms |
 |---|---:|---:|---:|---:|
-| FP16 | 221.7 | 1.60 | 11.7 | 240.1 |
-| INT8 | 178.6 | 1.60 | 9.9 | 189.0 |
-| INT4 | 139.0 | 1.60 | 7.4 | 152.4 |
+| FP16 | 233.1 | 1.60 | 12.1 | 245.4 |
+| INT8 | 179.3 | 1.60 | 9.1 | 186.6 |
+| INT4 | 142.5 | 1.60 | 7.8 | 159.9 |
 
 ## Long-stream check
 
-The following synthetic 80 s recording repeats the shared known-speech fixture four times. It checks performance after both attention windows fill; it is not a natural long-form accuracy benchmark. All four sentences and the final word were preserved.
+This earlier-build timing comparison uses a synthetic 80 s recording that repeats the shared known-speech fixture four times. It checks performance after both attention windows fill; it is not a natural long-form accuracy benchmark. All four sentences and the final word were preserved. The current-build E2E checks repeated the rollover/output assertions; the table retains the earlier timing and memory measurements.
 
 | INT8 policy | Audio s | Inference s | WER ↓ | Frame p95 ms | Peak RSS MiB | Peak physical footprint MiB |
 |---|---:|---:|---:|---:|---:|---:|
@@ -63,6 +69,14 @@ The following synthetic 80 s recording repeats the shared known-speech fixture f
 | CLI default: 256 MiB cache | 80.0 | 9.91 | 0.00% | 10.7 | 1463 | 2098 |
 
 ## Regression and round-trip coverage
+
+The [hosted package CI run](https://github.com/soniqo/speech-swift/actions/runs/38921004122)
+passed 1,588 unit checks with 46 skips and no failures. Separate PersonaPlex/Hibiki
+configuration, mapping, and cache checks passed 44 tests with six unavailable
+PersonaPlex fixture checks skipped. The full local 147-class model matrix was
+not completed: its unit phase was interrupted when a graphics render began.
+The equivalent unit selection completed on the hosted runner; real-model
+coverage below is specific to Kyutai and its Kokoro round trips.
 
 After integrating `main` at `511307a`, all 19 Kyutai E2E checks passed in
 separate class processes: seven INT8, six FP16, and six INT4. The two
@@ -72,9 +86,9 @@ the shared `StreamingRecognitionModel` adapter, rate validation, cumulative
 partial/final updates, idempotent finish, abandoned-session release, known
 speech, codec features, English/French round trips, and attention-window rollover.
 
-- 101 targeted Swift unit/logic tests passed; six existing PersonaPlex fixture tests were skipped because their fixtures were unavailable. Coverage includes existing transcription arguments, shared Mimi defaults, PersonaPlex/Hibiki configuration and cache logic, strict tensor completeness, UTF-8 decoding, lifecycle rules, and memory-option bounds.
+- Before integrating `main`, 101 targeted Swift unit/logic tests passed; six existing PersonaPlex fixture tests were skipped because their fixtures were unavailable. The current-base CI and shared-module checks above supersede those counts. Coverage includes existing transcription arguments, shared Mimi defaults, PersonaPlex/Hibiki configuration and cache logic, strict tensor completeness, UTF-8 decoding, lifecycle rules, and memory-option bounds.
 - 31 exporter/release-preparation tests passed, including source-sample preservation, audio-format guards, all precision layouts, rejected architectures, verified provenance, dataset identity and artifact checksums.
-- 15 real-weight E2E test executions passed across FP16, INT8 and INT4: known English transcription and arbitrary-chunk parity; two exact English Kokoro TTS → ASR round trips; a separate French synthetic round trip; and an 80 s stream crossing the 750-frame decoder and 250-frame encoder windows. Three additional INT8 decoder checks passed with fixed reference audio codes, and two additional INT8 codec-feature checks passed on difficult clips. Each E2E class ran in its own process. Attention caches retained bounded lengths while absolute positions continued to advance.
+- The earlier 15 real-weight E2E executions were repeated after integrating `main`, with the shared streaming adapter bringing the current total to 19 above. Earlier diagnostic runs also passed three INT8 decoder checks with fixed reference audio codes and two INT8 codec-feature checks on difficult clips. Each E2E class ran in its own process. Attention caches retained bounded lengths while absolute positions continued to advance.
 - The French round-trip fixture used macOS's French Thomas voice and the exact text “Bonjour, je voudrais un café avec du lait.” English round trips used cached Kokoro weights. Natural French quality is evaluated separately by the FLEURS table.
 - Release CLI transcription passed for all three precisions with streaming and the default 256 MiB MLX cache limit; an explicit limit also passed. The original upstream BF16 layout also passed the known-speech CLI check.
 - The corpus run exposed an existing empty-hypothesis crash in the WER scorer. A regression test now verifies full deletions, and all completed corpus scores include empty outputs.
@@ -89,7 +103,7 @@ The reference uses unmodified [Kyutai Moshi](https://github.com/kyutai-labs/mosh
 
 The original PyTorch codec uses causal attention and exact GELU. The upstream MLX codec example differs in those settings, so it is not used as the audio-feature oracle. Later residual codebook IDs can vary at floating-point decision boundaries; continuous features are compared numerically.
 
-Six earlier INT8 diagnostics used PCM16 copies resampled to identical mono 24 kHz FLEURS input. Four complete transcripts matched the independent reference, including both empty English outputs and the empty French output. Two quiet nonempty cases produced different text. With fixed reference audio codes, the native decoder matched every reference frame token for both differing clips and the known-speech fixture. Codec features passed the 0.001 numeric tolerance; codebook 0 matched every audio frame, while later residual-codebook decisions differed. Numeric feature tolerance therefore does not establish bit-exact audio codes or complete transcript parity on quiet speech. Those differences are retained in the diagnostic records.
+Six earlier INT8 diagnostics used PCM16 copies resampled to identical mono 24 kHz FLEURS input. Four complete transcripts matched the independent reference, including both empty English outputs and the empty French output. Two quiet nonempty cases produced different text. With fixed reference audio codes, the native decoder matched every reference frame token for both differing clips and the known-speech fixture. Codec features passed the 0.001 numeric tolerance; codebook 0 matched every audio frame, while later residual-codebook decisions differed. Numeric feature tolerance therefore does not establish bit-exact audio codes or complete transcript parity on quiet speech. These diagnostics predate the current-build corpus refresh.
 
 The diagnostic audio was resampled with ffmpeg for both runtimes; the main corpus run uses AudioFileLoader's resampler. Very quiet recordings can also be sensitive to that preprocessing difference. The two empty English recordings peak below 0.5% of full scale. The corpus benchmark preserves original levels and includes recognition failures.
 
@@ -111,8 +125,8 @@ ten-clip sequential process batches with a 256 MiB MLX cache limit.
 
 | INT8, 80 clips each | Original levels WER ↓ | Peak 0.9 WER ↓ | Improved / unchanged / worsened clips | Empty transcripts before → after |
 |---|---:|---:|---:|---:|
-| English | 23.91% | 7.70% | 47 / 27 / 6 | 2 → 0 |
-| French | 16.54% | 13.63% | 32 / 35 / 13 | 1 → 1 |
+| English | 23.74% | 7.81% | 45 / 29 / 6 | 2 → 0 |
+| French | 17.13% | 13.40% | 34 / 36 / 10 | 1 → 1 |
 
 Whole-file peak selection uses future audio. It is not a causal streaming gain
 controller, and the worsened clips remain included. No automatic normalization
@@ -125,14 +139,13 @@ therefore acquired quantization noise and bias. The preparation helper now write
 FLOAT WAV. All 160 prepared recordings were compared sample for sample with the
 decoded pinned source and matched exactly; two regression cases cover quiet FLOAT
 and PCM16 input. Release preparation rejects mismatched audio-format metadata.
-The old INT8 English 24.50% score becomes 23.91% when source samples
-are preserved. Preparation explains a small part of the error, rather than the
-large improvement from gain. Historical PCM16 measurements are retained in scratch storage, separate from the corrected corpus scores.
+On the earlier build, preserving source samples changed INT8 English WER from 24.50% to 23.91%. The current-build comparison above reruns both original and normalized levels. Preparation explains a small part of the error, rather than the
+large improvement from gain. Historical PCM16 measurements are summarized separately from the source-preserving corpus scores.
 
 The official Whisper English normalizer was also tested, pinned at
 `86098128c0b4f24f0e2aa2994de830614b474227`. On corrected INT8 English output it gives
-25.06% at original levels and
-9.34% after gain. The
+24.82% at original levels and
+9.46% after gain on the current build. The
 speech-swift score and normalizer are retained as the primary paired comparison.
 
 ### Original runtime and published references
@@ -153,7 +166,7 @@ wrong-script French failure. Gain restores the quiet-English speech there too.
 Some transcripts differ across runtimes and precisions, including an empty FP16
 French result after gain. Complete pipeline parity is not established for all
 inputs; the earlier fixed-code decoder and continuous-feature tests isolate those
-components separately. All differing diagnostic transcripts are retained.
+components separately. These diagnostic runs predate the current-build corpus refresh.
 
 Kyutai's [DSM paper, Table 1](https://arxiv.org/html/2509.08753v1#S4.SS3) reports
 6.4% average WER for its 2.6B English model across eight short-form OpenASR datasets,
@@ -169,7 +182,7 @@ regression threshold.
 
 ## Published artifacts and runtime checks
 
-The following public revisions were verified on 2026-10-16. All nine runtime and
+The following initial public revisions were verified on 2026-10-16. All nine runtime and
 validation artifacts in each repository passed size and SHA256 checks. Each
 repository includes the root configuration required for download tracking.
 
@@ -183,7 +196,7 @@ The artifacts are `config.json`, `model.safetensors`, `mimi.safetensors`,
 `tokenizer_en_fr_audio_8000.model`, `export.json`, `README.md`, `VALIDATION.md`,
 `benchmark.json`, and `SHA256SUMS`. Published [benchmark metadata](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-8bit/blob/d0dcdfed4d7d74fccdf518a89e6ae2036dd8c57d/benchmark.json)
 and [checksums](https://huggingface.co/aufklarer/Kyutai-STT-1B-MLX-8bit/blob/d0dcdfed4d7d74fccdf518a89e6ae2036dd8c57d/SHA256SUMS)
-record the release contract. Per-run JSON, transcripts, logs, and profiler output
+record the initial release contract. Current corpus accuracy and CLI profiles are reported above; runtime weights, tokenizer, configuration and export provenance remain unchanged. Current per-run JSON, transcripts, logs, and profiler output
 are retained in scratch storage rather than committed to this package.
 
 Post-publication runtime checks passed six CLI runs: batch and streaming for each
@@ -198,6 +211,8 @@ limit. These are functional checks, with no new performance claim.
 
 Build `asr-bench` in release mode with compiled MLX Metal resources, then run each engine/language in a separate process. A manifest is a relative WAV path, tab, and reference text; select the pinned first 80 test rows per language described above and preserve Float32 samples.
 
+To match the reported corpus isolation, split each manifest into ten-row TSV files in the same directory and run them sequentially. Sum substitutions, insertions, deletions and reference words across batches before calculating WER; do not average batch percentages. The commands below show the full-manifest form.
+
 ```bash
 asr-bench --dataset fleurs-en_us-80.tsv --engines kyutai-stt-mlx-int8 --mlx-cache-limit-mb 256 --output english-int8.json
 asr-bench --dataset fleurs-fr_fr-80.tsv --engines kyutai-stt-mlx-int8 --mlx-cache-limit-mb 256 --output french-int8.json
@@ -206,4 +221,4 @@ asr-bench --dataset fleurs-en-fr-16.tsv --engines kyutai-stt-mlx-int8 \
   --mlx-cache-limit-mb 256 --output cache256-int8.json
 ```
 
-Use `kyutai-stt-mlx-fp16` or `kyutai-stt-mlx-int4` for the other precisions. Local paths can override downloads through `KYUTAI_STT_FP16_MODEL_PATH`, `KYUTAI_STT_INT8_MODEL_PATH` and `KYUTAI_STT_INT4_MODEL_PATH`. Never overlap a model test or benchmark with another model/build/render job. Timing runs interrupted by observed competing work or system sleep were discarded and retried.
+Use `kyutai-stt-mlx-fp16` or `kyutai-stt-mlx-int4` for the other precisions. Local paths can override downloads through `KYUTAI_STT_FP16_MODEL_PATH`, `KYUTAI_STT_INT8_MODEL_PATH` and `KYUTAI_STT_INT4_MODEL_PATH`. Keep model processes and Swift builds sequential. Isolated performance runs must also avoid rendering jobs; the accuracy-only corpus sweeps explicitly permit non-model rendering. Timing runs interrupted by observed competing work or system sleep were discarded and retried.

@@ -91,10 +91,10 @@ owns decoder/cache state, consumes ordered `CapturedAudioChunk` values, and
 returns a common partial/final result without reprocessing earlier chunks.
 
 ```swift
+let session = try model.makeStreamingSession(language: nil)
 let source = AudioFileLoader.stream(
     url: input,
-    options: AudioFileStreamOptions(targetSampleRate: 16_000))
-let session = try model.makeStreamingSession(language: "en-US")
+    options: AudioFileStreamOptions(targetSampleRate: session.inputSampleRate))
 
 for try await chunk in source {
     for update in try session.push(chunk) {
