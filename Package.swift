@@ -923,7 +923,10 @@ let package = Package(
         ),
         .testTarget(
             name: "CSMTests",
-            dependencies: ["CSM", "PersonaPlex"]
+            dependencies: [
+                "CSM", "PersonaPlex",
+                .product(name: "MLX", package: "mlx-swift"),
+            ]
         ),
         .testTarget(
             name: "BenchmarkSupportTests",
@@ -952,7 +955,14 @@ let package = Package(
         ),
         .testTarget(
             name: "Qwen3ASRTests",
-            dependencies: ["Qwen3ASR", "SpeechVAD", "AudioCommon"],
+            dependencies: [
+                "Qwen3ASR",
+                "SpeechVAD",
+                "AudioCommon",
+                "MLXCommon",
+                // PreQuantizedLinearTests imports MLXRandom.
+                .product(name: "MLXRandom", package: "mlx-swift"),
+            ],
             resources: [
                 .copy("Resources/test_audio.wav"),
                 .copy("Resources/kokoro_continuous_stitched.wav"),
@@ -1204,7 +1214,8 @@ let package = Package(
             dependencies: [
                 "StableAudio3MusicGen",
                 "AudioCommon",
-                .product(name: "MLX", package: "mlx-swift")
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
             ]
         ),
         .testTarget(

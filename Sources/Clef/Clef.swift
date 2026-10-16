@@ -60,7 +60,7 @@ public final class Clef {
         let head = try ClefHead(config: hc, weights: MLX.loadArrays(url: directory.appendingPathComponent("joint_head.safetensors")))
         let weights = try MLX.loadArrays(url: directory.appendingPathComponent("model.safetensors"))
         try validateBackbone(weights, config: config)
-        let backbone = Qwen35MLXModel(config: config, optimizedDeltaNet: true)
+        let backbone = withThrowawayRandomState { Qwen35MLXModel(config: config, optimizedDeltaNet: true) }
         try Qwen35WeightLoader.loadWeights(into: backbone, weights: weights, progressHandler: progressHandler)
         let output = PreQuantizedEmbedding(embeddingCount: config.vocabSize, dimensions: config.hiddenSize, groupSize: 64, bits: 4)
         let prefix = weights["language_model.lm_head.weight"] != nil ? "language_model.lm_head" : "lm_head"

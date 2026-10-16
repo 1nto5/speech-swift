@@ -2,6 +2,7 @@ import AudioCommon
 import Foundation
 import MLX
 import MLXNN
+import MLXCommon
 
 /// Native MLX runtime for Nemotron-3.5 Streaming ASR.
 ///
@@ -185,7 +186,7 @@ public final class NemotronStreamingASRMLXModel: @unchecked Sendable {
         let weights = try MLX.loadArrays(
             url: directory.appendingPathComponent("model.safetensors")
         )
-        let network = NemotronMLXNetwork(configuration)
+        let network = withThrowawayRandomState { NemotronMLXNetwork(configuration) }
         do {
             try network.update(
                 parameters: ModuleParameters.unflattened(weights),

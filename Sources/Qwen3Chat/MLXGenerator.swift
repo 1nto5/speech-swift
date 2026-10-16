@@ -160,7 +160,7 @@ public final class Qwen35MLXChat: @unchecked Sendable {
 
         // Create model
         progressHandler?(0.6, "Creating model...")
-        let model = Qwen35MLXModel(config: config)
+        let model = withThrowawayRandomState { Qwen35MLXModel(config: config) }
 
         // Load weights
         progressHandler?(0.65, "Loading weights...")
@@ -190,7 +190,7 @@ public final class Qwen35MLXChat: @unchecked Sendable {
         let tokenizer = ChatTokenizer()
         try tokenizer.load(from: directory)
 
-        let model = Qwen35MLXModel(config: config)
+        let model = withThrowawayRandomState { Qwen35MLXModel(config: config) }
         try Qwen35WeightLoader.loadWeights(
             into: model, from: directory,
             progressHandler: progressHandler)
