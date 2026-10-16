@@ -44,6 +44,34 @@ let community1 = try await Community1DiarizationPipeline.fromPretrained(
 )
 ```
 
+## MLX initialization during checkpoint loading
+
+`MLXCommon` provides two helpers for constructing modules whose initial
+parameters will be replaced by a checkpoint:
+
+- `QuantizedLinear.preQuantized` creates lazy zero placeholders for the packed
+  weight, scales, quantization biases and optional output bias. Loading replaces
+  these arrays, including their dtypes, before inference. It avoids both random
+  weight generation and quantization of weights that will be discarded.
+- `withThrowawayRandomState` gives temporary floating-point initialization its
+  own random key. Discarded random draws therefore do not extend the caller's
+  lazy random-key chain. The caller's state is restored when construction returns
+  or throws.
+
+Composite loaders scope each component, including MAGNeT's T5 encoder and
+EnCodec decoder, Stable Audio 3's T5Gemma encoder and SAME-L decoder, and CSM's
+separately loaded Mimi codec. Scoping only the main network leaves the other
+components' initialization graphs reachable through the caller's random state.
+
+CSM's quantized embeddings still use MLX's `QuantizedEmbedding` initializer;
+they retain its known initialization-graph limitation until an explicit-array
+initializer is available. The helpers do not change checkpoint formats or
+quantization settings.
+
+Regression tests check that loading does not advance the caller's random key,
+including rejected checkpoints. This covers CPU graph retention that
+`Memory.activeMemory`, which measures GPU buffers, does not detect.
+
 ## HuggingFace Mirror (`HF_ENDPOINT`)
 
 Downloads default to `https://huggingface.co`. Users in regions where that host is slow or blocked — notably mainland China — can point the downloader at a mirror by setting the `HF_ENDPOINT` environment variable (the same name Python's `huggingface_hub` uses):

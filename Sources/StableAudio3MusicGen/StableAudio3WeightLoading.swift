@@ -145,7 +145,7 @@ func sa3LoadSAMELDecoder(dir: URL) throws -> SAMELDecoder {
     if let w = raw["mapping.weight"], w.ndim == 3 && w.dim(2) == 1 {
         raw["mapping.weight"] = w.reshaped([w.dim(0), w.dim(1)])
     }
-    let model = SAMELDecoder()
+    let model = withThrowawayRandomState { SAMELDecoder() }
     try sa3ApplyFlatWeights(into: model, mapping: raw)
     eval(model.parameters())
     return model
@@ -174,7 +174,7 @@ func sa3LoadT5Gemma(dir: URL) throws -> T5GemmaText {
         throw StableAudio3Error.tokenizerLoadFailed("\(error)")
     }
 
-    let model = T5GemmaEncoderModel()
+    let model = withThrowawayRandomState { T5GemmaEncoderModel() }
     try sa3ApplyFlatWeights(into: model, mapping: raw)
     eval(model.parameters())
     return T5GemmaText(encoder: model, tokenizer: tokenizer)

@@ -117,10 +117,12 @@ public final class MAGNeTMusicGen {
         }
         try lm.loadWeights(lmStripped)
 
-        let t5 = T5Encoder(config: t5Cfg)
+        let t5 = withThrowawayRandomState { T5Encoder(config: t5Cfg) }
         try t5.loadSanitizedWeights(t5Weights)
 
-        let encodec = EncodecModelMLX(config: encCfg, numQuantizers: cfg.nQ)
+        let encodec = withThrowawayRandomState {
+            EncodecModelMLX(config: encCfg, numQuantizers: cfg.nQ)
+        }
         try loadFlatWeights(into: encodec, mapping: encWeights)
 
         // text_conditioner.output_proj
