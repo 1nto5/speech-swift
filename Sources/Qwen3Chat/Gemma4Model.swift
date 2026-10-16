@@ -419,13 +419,13 @@ public final class Gemma4Attention: Module {
         let qDim = nHeads * headDim
         let kvDim = nKVHeads * headDim
 
-        _qProj = ModuleInfo(wrappedValue: QuantizedLinear(dim, qDim, bias: false, groupSize: gs, bits: bits))
-        _oProj = ModuleInfo(wrappedValue: QuantizedLinear(qDim, dim, bias: false, groupSize: gs, bits: bits))
+        _qProj = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(dim, qDim, bias: false, groupSize: gs, bits: bits))
+        _oProj = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(qDim, dim, bias: false, groupSize: gs, bits: bits))
         _qNorm = ModuleInfo(wrappedValue: RMSNorm(dimensions: headDim, eps: c.rmsNormEps))
 
         if hasKV {
-            _kProj = ModuleInfo(wrappedValue: QuantizedLinear(dim, kvDim, bias: false, groupSize: gs, bits: bits))
-            _vProj = ModuleInfo(wrappedValue: QuantizedLinear(dim, kvDim, bias: false, groupSize: gs, bits: bits))
+            _kProj = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(dim, kvDim, bias: false, groupSize: gs, bits: bits))
+            _vProj = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(dim, kvDim, bias: false, groupSize: gs, bits: bits))
             _kNorm = ModuleInfo(wrappedValue: RMSNorm(dimensions: headDim, eps: c.rmsNormEps))
             self.vNorm = Gemma4RMSNormNoScale(dimensions: headDim, eps: c.rmsNormEps)
         } else {
@@ -567,9 +567,9 @@ public final class Gemma4MLP: Module {
         let h = c.hiddenSize, gs = c.quantGroupSize, bits = c.quantBits
         let useDoubleWide = c.useDoubleWideMLP && c.isKVSharedLayer(layerIdx)
         let inter = c.intermediateSize * (useDoubleWide ? 2 : 1)
-        _gateProj = ModuleInfo(wrappedValue: QuantizedLinear(h, inter, bias: false, groupSize: gs, bits: bits))
-        _upProj = ModuleInfo(wrappedValue: QuantizedLinear(h, inter, bias: false, groupSize: gs, bits: bits))
-        _downProj = ModuleInfo(wrappedValue: QuantizedLinear(inter, h, bias: false, groupSize: gs, bits: bits))
+        _gateProj = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(h, inter, bias: false, groupSize: gs, bits: bits))
+        _upProj = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(h, inter, bias: false, groupSize: gs, bits: bits))
+        _downProj = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(inter, h, bias: false, groupSize: gs, bits: bits))
         super.init()
     }
 
@@ -607,9 +607,9 @@ public final class Gemma4Layer: Module {
         _postFeedforwardLayerNorm = ModuleInfo(wrappedValue: RMSNorm(dimensions: c.hiddenSize, eps: c.rmsNormEps))
 
         let ple = c.hiddenSizePerLayerInput
-        _perLayerInputGate = ModuleInfo(wrappedValue: QuantizedLinear(
+        _perLayerInputGate = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(
             c.hiddenSize, ple, bias: false, groupSize: c.quantGroupSize, bits: c.quantBits))
-        _perLayerProjection = ModuleInfo(wrappedValue: QuantizedLinear(
+        _perLayerProjection = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(
             ple, c.hiddenSize, bias: false, groupSize: c.quantGroupSize, bits: c.quantBits))
         _postPerLayerInputNorm = ModuleInfo(wrappedValue: RMSNorm(dimensions: c.hiddenSize, eps: c.rmsNormEps))
 
@@ -706,7 +706,7 @@ public final class Gemma4Model: Module {
             embeddingCount: c.vocabSizePerLayerInput,
             dimensions: c.numHiddenLayers * c.hiddenSizePerLayerInput,
             groupSize: c.quantGroupSize, bits: c.quantBits))
-        _perLayerModelProjection = ModuleInfo(wrappedValue: QuantizedLinear(
+        _perLayerModelProjection = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(
             c.hiddenSize, c.numHiddenLayers * c.hiddenSizePerLayerInput,
             bias: false, groupSize: c.quantGroupSize, bits: c.quantBits))
         _perLayerProjectionNorm = ModuleInfo(wrappedValue: RMSNorm(

@@ -49,10 +49,10 @@ public final class DeltaNetLayer: Module {
 
         let groupSize = config.quantGroupSize
         let bits = config.quantBits
-        self._inProjQKV = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, qkvDim, bias: false, groupSize: groupSize, bits: bits))
-        self._inProjZ = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, numHeads * valueDim, bias: false, groupSize: groupSize, bits: bits))
-        self._inProjB = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, numHeads, bias: false, groupSize: groupSize, bits: bits))
-        self._inProjA = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, numHeads, bias: false, groupSize: groupSize, bits: bits))
+        self._inProjQKV = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(hiddenSize, qkvDim, bias: false, groupSize: groupSize, bits: bits))
+        self._inProjZ = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(hiddenSize, numHeads * valueDim, bias: false, groupSize: groupSize, bits: bits))
+        self._inProjB = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(hiddenSize, numHeads, bias: false, groupSize: groupSize, bits: bits))
+        self._inProjA = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(hiddenSize, numHeads, bias: false, groupSize: groupSize, bits: bits))
 
         self._convWeight = ParameterInfo(
             wrappedValue: MLXArray.zeros([qkvDim, convKernel, 1]))
@@ -63,7 +63,7 @@ public final class DeltaNetLayer: Module {
         self._norm = ModuleInfo(
             wrappedValue: RMSNorm(dimensions: valueDim, eps: Float(config.rmsNormEps)))
 
-        self._outProj = ModuleInfo(wrappedValue: QuantizedLinear(numHeads * valueDim, hiddenSize, bias: false, groupSize: groupSize, bits: bits))
+        self._outProj = ModuleInfo(wrappedValue: QuantizedLinear.preQuantized(numHeads * valueDim, hiddenSize, bias: false, groupSize: groupSize, bits: bits))
 
         super.init()
     }
@@ -319,17 +319,17 @@ public final class GatedAttentionLayer: Module {
         let qDim = numQHeads * headDim  // 2048
 
         // q_proj outputs 2 * qDim (Q + gate)
-        self._qProj = ModuleInfo(wrappedValue:  QuantizedLinear(
+        self._qProj = ModuleInfo(wrappedValue:  QuantizedLinear.preQuantized(
                 hiddenSize, 2 * qDim, bias: false,
                 groupSize: groupSize, bits: bits))
-        self._kProj = ModuleInfo(wrappedValue:  QuantizedLinear(
+        self._kProj = ModuleInfo(wrappedValue:  QuantizedLinear.preQuantized(
                 hiddenSize, numKVHeads * headDim, bias: false,
                 groupSize: groupSize, bits: bits))
-        self._vProj = ModuleInfo(wrappedValue:  QuantizedLinear(
+        self._vProj = ModuleInfo(wrappedValue:  QuantizedLinear.preQuantized(
                 hiddenSize, numKVHeads * headDim, bias: false,
                 groupSize: groupSize, bits: bits))
         // o_proj: qDim -> hiddenSize (after gating reduces 2*qDim to qDim)
-        self._oProj = ModuleInfo(wrappedValue:  QuantizedLinear(
+        self._oProj = ModuleInfo(wrappedValue:  QuantizedLinear.preQuantized(
                 qDim, hiddenSize, bias: false,
                 groupSize: groupSize, bits: bits))
 
@@ -522,13 +522,13 @@ public final class Qwen35MLP: Module {
         let gs = config.quantGroupSize, bits = config.quantBits
 
         self._gateProj = ModuleInfo(
-            wrappedValue: QuantizedLinear(hs, is_, bias: false, groupSize: gs, bits: bits),
+            wrappedValue: QuantizedLinear.preQuantized(hs, is_, bias: false, groupSize: gs, bits: bits),
             key: "gate_proj")
         self._upProj = ModuleInfo(
-            wrappedValue: QuantizedLinear(hs, is_, bias: false, groupSize: gs, bits: bits),
+            wrappedValue: QuantizedLinear.preQuantized(hs, is_, bias: false, groupSize: gs, bits: bits),
             key: "up_proj")
         self._downProj = ModuleInfo(
-            wrappedValue: QuantizedLinear(is_, hs, bias: false, groupSize: gs, bits: bits),
+            wrappedValue: QuantizedLinear.preQuantized(is_, hs, bias: false, groupSize: gs, bits: bits),
             key: "down_proj")
 
         super.init()

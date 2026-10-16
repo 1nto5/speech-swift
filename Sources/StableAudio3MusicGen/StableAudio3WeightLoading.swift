@@ -2,6 +2,7 @@ import Foundation
 import MLX
 import MLXNN
 import AudioCommon
+import MLXCommon
 
 /// Errors raised by the SA3 weight loader.
 public enum StableAudio3Error: Error, LocalizedError {
@@ -130,7 +131,7 @@ func sa3LoadDiTMedium(dir: URL, tLat: Int, bits: Int) throws
     let secondsEmbedder = SecondsTotalEmbedder(
         weight: secsW.asType(.float32), bias: secsB.asType(.float32))
 
-    let model = DiTMedium(tLat: tLat, bits: bits)
+    let model = withThrowawayRandomState { DiTMedium(tLat: tLat, bits: bits) }
     let rewritten = sa3RewriteDiTMediumKeys(raw)
     try sa3ApplyFlatWeights(into: model, mapping: rewritten)
     eval(model.parameters())

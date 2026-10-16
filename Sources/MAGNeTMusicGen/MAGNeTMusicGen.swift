@@ -110,7 +110,7 @@ public final class MAGNeTMusicGen {
         let encWeights = try loadSafetensors(paths.encodecDir.appendingPathComponent("model.safetensors"))
 
         // Build modules.
-        let lm = MAGNeTLM(config: cfg)
+        let lm = withThrowawayRandomState { MAGNeTLM(config: cfg) }
         var lmStripped: [String: MLXArray] = [:]
         for (k, v) in bundleWeights where k.hasPrefix("lm.") {
             lmStripped[String(k.dropFirst("lm.".count))] = v

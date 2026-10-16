@@ -1,6 +1,7 @@
 import Foundation
 import MLX
 import AudioCommon
+import MLXCommon
 
 /// Streaming chat backend for the hand-written `Gemma4Model` (Gemma 4 text, E2B/E4B MLX int4).
 ///
@@ -62,7 +63,7 @@ public final class Gemma4Chat: @unchecked Sendable {
         try gemmaTok.load(from: directory)
         let tok = ChatTokenizer()
         try? tok.load(from: directory)   // best-effort; only the protocol surface needs it
-        let model = Gemma4Model(config: config)
+        let model = withThrowawayRandomState { Gemma4Model(config: config) }
         try Gemma4WeightLoader.loadWeights(into: model, from: directory, progressHandler: progressHandler)
         return Gemma4Chat(config: config, gemmaTokenizer: gemmaTok, tokenizer: tok, model: model)
     }

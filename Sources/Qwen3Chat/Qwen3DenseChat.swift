@@ -1,6 +1,7 @@
 import Foundation
 import MLX
 import AudioCommon
+import MLXCommon
 
 /// Chat backend for `Qwen3DenseModel` (standard Qwen3: 1.7B / 4B / 8B …).
 ///
@@ -38,7 +39,7 @@ public final class Qwen3DenseChat: @unchecked Sendable {
         let tokenizer = ChatTokenizer()
         try tokenizer.load(from: directory)
         tokenizer.eosTokenId = config.eosTokenId
-        let model = Qwen3DenseModel(config: config)
+        let model = withThrowawayRandomState { Qwen3DenseModel(config: config) }
         try Qwen3DenseWeightLoader.loadWeights(into: model, from: directory, progressHandler: progressHandler)
         return Qwen3DenseChat(dc: config, tokenizer: tokenizer, model: model)
     }
