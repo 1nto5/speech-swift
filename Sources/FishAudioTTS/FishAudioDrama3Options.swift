@@ -64,4 +64,3 @@ struct Drama3Sampler {
         return kept.last!
     }
 }
-

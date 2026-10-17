@@ -4,6 +4,7 @@ import HummingbirdCore
 import NIOCore
 import KokoroTTS
 import VoxtralTTS
+import PocketTTS
 
 // MARK: - OpenAI-compatible /v1/audio/speech
 
@@ -160,8 +161,29 @@ func handleOpenAISpeech(
         engine: variant.engine)
 
     if speechRequest.stream {
+        if variant.engine == "pocket-tts" {
+            do {
+                try PocketTTSModel.validateInput(text: speechRequest.input, language: speechRequest.language, voice: voice ?? "alba")
+                let permit = try await state.inferenceGate.acquire()
+                do {
+                    let model = try await state.loadPocketTTS(modelId: variant.modelId)
+                    return Response(status: .ok, headers: [.contentType: "audio/pcm"], body: .init { writer in
+                        defer { permit.release() }
+                        try await model.generateStreaming(text: speechRequest.input, language: speechRequest.language) { chunk in
+                            if !chunk.samples.isEmpty {
+                                try await writer.write(ByteBuffer(data: floatToPCM16LE(chunk.samples)))
+                            }
+                        }
+                        try await writer.finish(nil)
+                    })
+                } catch { permit.release(); throw error }
+            } catch {
+                return openAIErrorResponse("Speech synthesis failed: \(inferenceErrorDescription(error))",
+                                           status: inferenceErrorStatus(error))
+            }
+        }
         guard variant.engine == "voxtral-tts" else {
-            return openAIErrorResponse("Streaming speech is currently supported for Voxtral TTS models",
+            return openAIErrorResponse("Streaming speech is currently supported for Pocket and Voxtral TTS models",
                                        status: .badRequest)
         }
         do {
@@ -237,7 +259,7 @@ func resolvedLocalVoice(_ voice: String, engine: String) -> String? {
         return engine == "kokoro" ? KokoroTTSModel.defaultVoice : nil
     }
     switch engine {
-    case "kokoro", "qwen3-tts", "voxtral-tts":
+    case "kokoro", "qwen3-tts", "voxtral-tts", "pocket-tts":
         return voice
     default:
         return nil

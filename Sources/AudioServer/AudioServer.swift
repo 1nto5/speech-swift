@@ -14,6 +14,7 @@ import OmnilingualASR
 import KokoroTTS
 import VoxCPM2TTS
 import VoxtralTTS
+import PocketTTS
 import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
@@ -222,7 +223,7 @@ public struct AudioServer {
             do {
                 samples = try await dispatchSynthesize(
                     text: text, variant: variant, language: language, state: state,
-                    voice: variant.engine == "voxtral-tts" ? params.string("voice") : nil)
+                    voice: ["voxtral-tts", "pocket-tts"].contains(variant.engine) ? params.string("voice") : nil)
             } catch is CancellationError { throw CancellationError() }
             catch { return errorResponse(inferenceErrorDescription(error), status: inferenceErrorStatus(error)) }
 
@@ -397,6 +398,7 @@ protocol RealtimeModelLoading: Sendable {
     func loadKokoro(modelId: String) async throws -> KokoroTTSModel
     func loadVoxCPM2(modelId: String) async throws -> VoxCPM2TTSModel
     func loadVoxtralTTS(modelId: String) async throws -> VoxtralTTSModel
+    func loadPocketTTS(modelId: String) async throws -> PocketTTSModel
     func loadIndicMio(modelId: String) async throws -> IndicMioTTSModel
     func loadMagpie() async throws -> MagpieTTS
     func loadMagpieCoreML() async throws -> MagpieTTSCoreML
@@ -491,6 +493,10 @@ final class FailingRealtimeModelLoading: RealtimeModelLoading, @unchecked Sendab
     func loadVoxtralTTS(modelId: String) async throws -> VoxtralTTSModel {
         try await fail()
     }
+    func loadPocketTTS(modelId: String) async throws -> PocketTTSModel {
+        try await fail()
+    }
+
 
     func loadIndicMio(modelId: String) async throws -> IndicMioTTSModel {
         try await fail()
@@ -654,6 +660,12 @@ final class ModelState: RealtimeModelLoading, @unchecked Sendable {
         return try await cache.load(key: modelId) {
             print("[server] Loading Voxtral TTS (\(modelId))...")
             return try await VoxtralTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        }
+    }
+
+    func loadPocketTTS(modelId: String) async throws -> PocketTTSModel {
+        try await cache.load(key: modelId) {
+            try await PocketTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
         }
     }
 
@@ -1372,6 +1384,16 @@ func handleRealtimeWS(
                         : resample(samples, from: model.outputSampleRate, to: 24000)
                     totalSamples += try await streamSamplesAsDeltas(
                         samples24k, outbound: outbound, responseId: responseId)
+                case "pocket-tts":
+                    let voice = input?["voice"] as? String ?? session.voice
+                    try PocketTTSModel.validateInput(text: text, language: language,
+                        voice: voice.flatMap { resolvedLocalVoice($0, engine: "pocket-tts") } ?? "alba")
+                    let model = try await runOffloaded { try await state.loadPocketTTS(modelId: ttsVariant.modelId) }
+                    try await model.generateStreaming(text: text, language: language) { chunk in
+                        if !chunk.samples.isEmpty {
+                            totalSamples += try await streamSamplesAsDeltas(chunk.samples, outbound: outbound, responseId: responseId)
+                        }
+                    }
                 case "voxtral-tts":
                     let preset = try validatedVoxtralVoice(input?["voice"] as? String ?? session.voice, language: language)
                     let normalized = try VoxtralTTSTokenizer.normalizedText(text)
@@ -1807,6 +1829,11 @@ func dispatchSynthesize(
         return model.outputSampleRate == 24000
             ? samples
             : resample(samples, from: model.outputSampleRate, to: 24000)
+    case "pocket-tts":
+        try PocketTTSModel.validateInput(text: text, language: language,
+            voice: voice.flatMap { resolvedLocalVoice($0, engine: "pocket-tts") } ?? "alba")
+        let model = try await state.loadPocketTTS(modelId: variant.modelId)
+        return try await model.generate(text: text, language: language)
     case "voxtral-tts":
         let preset = try validatedVoxtralVoice(voice, language: language)
         let normalized = try VoxtralTTSTokenizer.normalizedText(text)
@@ -2031,6 +2058,7 @@ func formatJSON(_ dict: [String: Any]) -> String {
 
 func inferenceErrorStatus(_ error: Error) -> HTTPResponse.Status {
     if case InferenceGate.AdmissionError.queueFull = error { return .serviceUnavailable }
+    if case PocketTTSError.invalidInput = error { return .badRequest }
     if let error = error as? VoxtralTTSError {
         switch error {
         case .invalidInput, .unknownVoice: return .badRequest

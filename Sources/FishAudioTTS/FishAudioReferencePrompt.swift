@@ -19,4 +19,3 @@ public struct FishAudioReferencePrompt: Sendable, Equatable {
         self.codes = codes
     }
 }
-

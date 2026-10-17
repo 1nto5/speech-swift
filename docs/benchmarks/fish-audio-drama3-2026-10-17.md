@@ -174,3 +174,7 @@ streaming usage.
 
 Preserved baseline runtime source SHA-256: `d1fe5c530450f11ab065a04bff6e87a1b111dd07e21274245560791b58eb58d5`.
 Baseline release profiler SHA-256: `7d86aea7bed8596acd64e60c686d7f46927907e850683aa638d64ad5db51ed9f`.
+
+Measured runtime snapshot: `bf3bccfd9a219df94b29b2290b951b4bdf194b80`.
+Subsequent integration retains the Drama 3 implementation while adding the
+current package targets and CLI routes from main.
