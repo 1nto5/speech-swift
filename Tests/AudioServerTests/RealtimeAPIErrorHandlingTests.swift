@@ -2,25 +2,19 @@ import XCTest
 @testable import AudioServer
 
 final class RealtimeAPIErrorHandlingTests: XCTestCase {
-    static var serverTask: Task<Void, Error>?
     static let port = 19387
 
-    override class func setUp() {
-        super.setUp()
-        serverTask = Task {
+    override func setUp() async throws {
+        try await super.setUp()
+        let fixture = TestAudioServer(port: Self.port) {
             let server = AudioServer(
                 host: "127.0.0.1",
-                port: port,
+                port: Self.port,
                 realtimeState: FailingRealtimeModelLoading())
             try await server.run()
         }
-        Thread.sleep(forTimeInterval: 1.5)
-    }
-
-    override class func tearDown() {
-        serverTask?.cancel()
-        Thread.sleep(forTimeInterval: 0.5)
-        super.tearDown()
+        addTeardownBlock { await fixture.stop() }
+        try await fixture.start()
     }
 
     private func connect() async throws -> URLSessionWebSocketTask {
@@ -91,26 +85,20 @@ final class RealtimeAPIErrorHandlingTests: XCTestCase {
 }
 
 final class RealtimeAPIKeepaliveTests: XCTestCase {
-    static var serverTask: Task<Void, Error>?
     static let port = 19388
 
-    override class func setUp() {
-        super.setUp()
-        serverTask = Task {
+    override func setUp() async throws {
+        try await super.setUp()
+        let fixture = TestAudioServer(port: Self.port) {
             let server = AudioServer(
                 host: "127.0.0.1",
-                port: port,
+                port: Self.port,
                 realtimeState: FailingRealtimeModelLoading(
                     beforeFailure: { Thread.sleep(forTimeInterval: 61) }))
             try await server.run()
         }
-        Thread.sleep(forTimeInterval: 1.5)
-    }
-
-    override class func tearDown() {
-        serverTask?.cancel()
-        Thread.sleep(forTimeInterval: 0.5)
-        super.tearDown()
+        addTeardownBlock { await fixture.stop() }
+        try await fixture.start()
     }
 
     private func connect() async throws -> URLSessionWebSocketTask {
@@ -174,25 +162,19 @@ final class RealtimeAPIKeepaliveTests: XCTestCase {
 /// arrive at the 15s cadence — proving the heartbeat runs from session
 /// accept, not just inside `runOffloaded`.
 final class RealtimeAPIIdleKeepaliveTests: XCTestCase {
-    static var serverTask: Task<Void, Error>?
     static let port = 19389
 
-    override class func setUp() {
-        super.setUp()
-        serverTask = Task {
+    override func setUp() async throws {
+        try await super.setUp()
+        let fixture = TestAudioServer(port: Self.port) {
             let server = AudioServer(
                 host: "127.0.0.1",
-                port: port,
+                port: Self.port,
                 realtimeState: FailingRealtimeModelLoading())
             try await server.run()
         }
-        Thread.sleep(forTimeInterval: 1.5)
-    }
-
-    override class func tearDown() {
-        serverTask?.cancel()
-        Thread.sleep(forTimeInterval: 0.5)
-        super.tearDown()
+        addTeardownBlock { await fixture.stop() }
+        try await fixture.start()
     }
 
     private func connect() async throws -> URLSessionWebSocketTask {

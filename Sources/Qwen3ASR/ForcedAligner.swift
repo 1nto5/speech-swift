@@ -482,11 +482,13 @@ public extension Qwen3ForcedAligner {
             variant = .mlx4bit
         }
 
-        let model = Qwen3ForcedAligner(
-            audioConfig: .forcedAligner,
-            textConfig: variant.textConfig,
-            useFloatTextDecoder: variant.usesFloatTextDecoder
-        )
+        let model = withThrowawayRandomState {
+            Qwen3ForcedAligner(
+                audioConfig: .forcedAligner,
+                textConfig: variant.textConfig,
+                useFloatTextDecoder: variant.usesFloatTextDecoder
+            )
+        }
 
         // Load tokenizer
         let vocabPath = cacheDir.appendingPathComponent("vocab.json")

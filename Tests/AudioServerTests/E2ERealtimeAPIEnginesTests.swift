@@ -14,10 +14,9 @@ import XCTest
 ///     audio and `response.create` runs the S2S model on it
 ///
 /// These tests download model weights on first run. Skipped in CI via the
-/// `E2E` filter prefix; runs locally as part of `make test`.
+/// `E2E` filter prefix; runs locally with the isolated E2E runner.
 final class E2ERealtimeAPIEnginesTests: XCTestCase {
-    static var serverTask: Task<Void, Error>?
-    static let port = 19386
+    static let port = 19390
     private static let webSocketSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 300
@@ -25,19 +24,14 @@ final class E2ERealtimeAPIEnginesTests: XCTestCase {
         return URLSession(configuration: config)
     }()
 
-    override class func setUp() {
-        super.setUp()
-        serverTask = Task {
-            let server = AudioServer(host: "127.0.0.1", port: port)
+    override func setUp() async throws {
+        try await super.setUp()
+        let fixture = TestAudioServer(port: Self.port) {
+            let server = AudioServer(host: "127.0.0.1", port: Self.port)
             try await server.run()
         }
-        Thread.sleep(forTimeInterval: 1.5)
-    }
-
-    override class func tearDown() {
-        serverTask?.cancel()
-        Thread.sleep(forTimeInterval: 0.5)
-        super.tearDown()
+        addTeardownBlock { await fixture.stop() }
+        try await fixture.start()
     }
 
     // MARK: - Helpers

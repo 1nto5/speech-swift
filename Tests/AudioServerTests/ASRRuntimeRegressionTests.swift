@@ -12,7 +12,6 @@ private actor InferenceProbe {
 }
 
 final class ASRRuntimeRegressionTests: XCTestCase {
-    private var server: Task<Void, Error>?
     private let port = 19431
     private let client = URLSession(configuration: {
         let config = URLSessionConfiguration.ephemeral
@@ -21,25 +20,25 @@ final class ASRRuntimeRegressionTests: XCTestCase {
     }())
 
     override func tearDown() {
-        server?.cancel()
         client.invalidateAndCancel()
         super.tearDown()
     }
 
     private func start(
         gate: InferenceGate = InferenceGate(),
+        vad: (any StreamingVADProvider)? = nil,
         transcribe: @escaping @Sendable ([Float], Int, String, String?) async throws -> String
     ) async throws {
-        let state = FailingRealtimeModelLoading(inferenceGate: gate, qwenTranscription: transcribe)
-        let service = AudioServer(host: "127.0.0.1", port: port,
-                                  state: ModelState(inferenceGate: gate), realtimeState: state)
-        server = Task { try await service.run() }
-        for _ in 0..<100 {
-            if let (_, response) = try? await client.data(from: url("/health")),
-               (response as? HTTPURLResponse)?.statusCode == 200 { return }
-            try await Task.sleep(nanoseconds: 20_000_000)
+        let state = FailingRealtimeModelLoading(
+            vadOverride: vad, inferenceGate: gate, qwenTranscription: transcribe)
+        let port = self.port
+        let fixture = TestAudioServer(port: port) {
+            let service = AudioServer(host: "127.0.0.1", port: port,
+                                      state: ModelState(inferenceGate: gate), realtimeState: state)
+            try await service.run()
         }
-        throw NSError(domain: "ASRRuntimeRegressionTests.start", code: 1)
+        addTeardownBlock { await fixture.stop() }
+        try await fixture.start()
     }
 
     private func url(_ path: String) -> URL { URL(string: "http://127.0.0.1:\(port)\(path)")! }
@@ -156,6 +155,56 @@ final class ASRRuntimeRegressionTests: XCTestCase {
         }
         let (status, _) = try await http
         XCTAssertEqual(status, 200)
+        let maximum = await probe.maxActive()
+        XCTAssertEqual(maximum, 1)
+    }
+
+    func testVADCommitAndHTTPShareTheLaneAndPreserveAutomaticLanguage() async throws {
+        let gate = InferenceGate()
+        let probe = InferenceProbe()
+        let vad = ScriptedVAD(sampleRate: 24_000, chunkSize: 6_000,
+                              probabilities: [0, 0.8, 0.8, 0.8, 0.1, 0.1])
+        try await start(gate: gate, vad: vad) { _, _, _, language in
+            XCTAssertTrue(language == nil || language == "german")
+            await probe.enter()
+            try await Task.sleep(nanoseconds: 20_000_000)
+            await probe.leave()
+            return language == nil ? "automatic language" : "explicit language"
+        }
+        let permit = try await gate.acquire()
+        defer { permit.release() }
+        let ws = client.webSocketTask(with: URL(string: "ws://127.0.0.1:\(port)/v1/realtime")!)
+        ws.resume()
+        defer { ws.cancel(with: .normalClosure, reason: nil) }
+        _ = try await receive(ws)
+        try await send(ws, ["type": "session.update", "session": [
+            "model": "qwen3", "turn_detection": [
+                "type": "server_vad", "prefix_padding_ms": 250, "silence_duration_ms": 250
+            ]
+        ]])
+        _ = try await receive(ws)
+        try await send(ws, ["type": "input_audio_buffer.append",
+                            "audio": Data(repeating: 0, count: 36_000 * 2).base64EncodedString()])
+        for expected in ["input_audio_buffer.speech_started", "input_audio_buffer.speech_stopped",
+                         "input_audio_buffer.committed"] {
+            let event = try await receive(ws)
+            XCTAssertEqual(event["type"] as? String, expected)
+        }
+        let blockedMaximum = await probe.maxActive()
+        XCTAssertEqual(blockedMaximum, 0)
+        async let http = transcribe()
+        permit.release()
+        var completed = false
+        while !completed {
+            let event = try await receive(ws)
+            if event["type"] as? String == "conversation.item.input_audio_transcription.completed" {
+                XCTAssertEqual(event["transcript"] as? String, "automatic language")
+            }
+            completed = event["type"] as? String == "response.done"
+        }
+        let (status, body) = try await http
+        XCTAssertEqual(status, 200)
+        XCTAssertEqual(body["text"] as? String, "explicit language")
         let maximum = await probe.maxActive()
         XCTAssertEqual(maximum, 1)
     }

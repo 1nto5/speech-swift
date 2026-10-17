@@ -1919,7 +1919,7 @@ public extension Qwen3TTSModel {
         let resolvedConfiguration = try resolveLocalConfiguration(
             from: configPath,
             fallback: configuration)
-        let model = Qwen3TTSModel(config: resolvedConfiguration)
+        let model = withThrowawayRandomState { Qwen3TTSModel(config: resolvedConfiguration) }
         model.speakerConfig = try parseSpeakerConfig(from: configPath)
 
         progressHandler?(0.15, "Loading tokenizer...")

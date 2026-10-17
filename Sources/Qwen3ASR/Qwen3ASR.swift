@@ -140,12 +140,9 @@ public class Qwen3ASRModel {
     /// Whether the model weights are loaded and ready for inference.
     var _isLoaded = true
 
-    /// MLX cache limit captured at load time for the .large variant. Stored
-    /// per-instance so `unload()` can restore it — preventing the 4 GB cap
-    /// from leaking into co-loaded models (PersonaPlex loads ASR + LM + TTS
-    /// in the same process). `nil` when no cap was applied (small variant
-    /// or already-capped global state).
-    var savedMLXCacheLimit: Int?
+    /// Registration in the shared cache-budget coordinator. Released by
+    /// `unload()` or automatically when this model is destroyed.
+    var mlxCacheLimitLease: Qwen3ASRCacheLimitCoordinator.Lease?
 
     init(
         audioConfig: Qwen3AudioEncoderConfig = .default,
@@ -234,7 +231,8 @@ public class Qwen3ASRModel {
                     language: resolvedOptions.language,
                     maxTokens: resolvedOptions.maxTokens,
                     context: resolvedOptions.context,
-                    decodingOptions: resolvedOptions
+                    decodingOptions: resolvedOptions,
+                    checkCancellation: {}
                 )
                 continue
             }
@@ -270,11 +268,13 @@ public class Qwen3ASRModel {
         sampleRate: Int = 16000,
         options: Qwen3DecodingOptions
     ) -> String {
-        transcribe(audio: audio, sampleRate: sampleRate, options: options, checkCancellation: {})
+        transcribe(
+            audio: audio, sampleRate: sampleRate, options: options,
+            checkCancellation: {})
     }
 
-    /// Throwing, cooperative-cancellation entry point for managed inference.
-    /// The existing synchronous APIs retain their decoding behavior.
+    /// Throwing entry point that validates model readiness and cooperatively
+    /// observes cancellation using the native cancellation-aware decoder.
     public func transcribeThrowing(
         audio: [Float],
         sampleRate: Int = 16000,
@@ -284,12 +284,42 @@ public class Qwen3ASRModel {
         guard _isLoaded, textDecoder != nil, tokenizer != nil else {
             throw AudioModelError.inferenceFailed(operation: "transcribe", reason: "Model is not loaded")
         }
-        return try transcribe(audio: audio, sampleRate: sampleRate, options: options,
-                              checkCancellation: { try Task.checkCancellation() })
+        return try transcribeCheckingCancellation(
+            audio: audio, sampleRate: sampleRate, options: options)
     }
 
+    /// Cancellation-aware transcription for async callers.
+    ///
+    /// Decodes exactly like `transcribe(audio:sampleRate:options:)` but
+    /// observes Swift task cancellation at cooperative checkpoints: before
+    /// feature extraction, before the audio encoder, before decoder prefill,
+    /// and before every decoder step on both the greedy and the
+    /// repetition-aware paths. Once cancellation is observed, this throws
+    /// `CancellationError` instead of returning a partial transcript. MLX
+    /// work already in flight completes first, so cancellation latency is
+    /// bounded by one encoder/prefill evaluation or one token step.
+    ///
+    /// The synchronous `transcribe` overloads keep their non-throwing
+    /// contract and are not task-cancellation entry points. Use this method
+    /// from request-scoped tasks (HTTP handlers, WebSocket sessions, UI
+    /// tasks) where an abandoned request should release the GPU promptly.
+    public func transcribeCheckingCancellation(
+        audio: [Float],
+        sampleRate: Int = 16000,
+        options: Qwen3DecodingOptions = Qwen3DecodingOptions()
+    ) throws -> String {
+        try transcribe(
+            audio: audio, sampleRate: sampleRate, options: options,
+            checkCancellation: { try Task.checkCancellation() })
+    }
+
+    /// Shared implementation behind the synchronous and the
+    /// cancellation-aware entry points. `checkCancellation` is invoked at
+    /// each cooperative checkpoint; the synchronous API passes a no-op.
     private func transcribe(
-        audio: [Float], sampleRate: Int, options: Qwen3DecodingOptions,
+        audio: [Float],
+        sampleRate: Int,
+        options: Qwen3DecodingOptions,
         checkCancellation: () throws -> Void
     ) rethrows -> String {
         try checkCancellation()
@@ -299,15 +329,14 @@ public class Qwen3ASRModel {
         let effective = options.adaptedFor(audioDurationSeconds: durationSeconds)
 
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
-        let batchedFeatures = melFeatures.expandedDimensions(axis: 0)
         try checkCancellation()
+        let batchedFeatures = melFeatures.expandedDimensions(axis: 0)
         var audioEmbeds = audioEncoder(batchedFeatures)
         audioEmbeds = audioEmbeds.expandedDimensions(axis: 0)
         guard let textDecoder = textDecoder else {
             let shape = audioEmbeds.shape
             return "[Audio encoded: \(shape)] - Text decoder not loaded"
         }
-        try checkCancellation()
         return try generateText(
             audioEmbeds: audioEmbeds,
             textDecoder: textDecoder,
@@ -371,7 +400,8 @@ public class Qwen3ASRModel {
                 language: effective.language,
                 maxTokens: effective.maxTokens,
                 context: effective.context,
-                decodingOptions: effective
+                decodingOptions: effective,
+                checkCancellation: {}
             )
         }
         return generateText(
@@ -379,7 +409,8 @@ public class Qwen3ASRModel {
             textDecoder: textDecoder,
             language: effective.language,
             maxTokens: effective.maxTokens,
-            context: effective.context
+            context: effective.context,
+            checkCancellation: {}
         )
     }
 
@@ -390,16 +421,14 @@ public class Qwen3ASRModel {
     /// optional temperature sampling before each token selection. With the
     /// default `Qwen3DecodingOptions()` (repetition=1.0, no-repeat=0,
     /// temperature=0) behaviour is bit-identical to plain greedy.
-    func generateText(
-        audioEmbeds: MLXArray, textDecoder: QuantizedTextModel,
-        language: String?, maxTokens: Int, context: String? = nil,
-        decodingOptions: Qwen3DecodingOptions = Qwen3DecodingOptions()
-    ) -> String {
-        generateText(audioEmbeds: audioEmbeds, textDecoder: textDecoder,
-                     language: language, maxTokens: maxTokens, context: context,
-                     decodingOptions: decodingOptions, checkCancellation: {})
-    }
-
+    ///
+    /// `checkCancellation` is invoked before decoder prefill and forwarded
+    /// to the decoder loop, which invokes it before each token's work is
+    /// submitted. Synchronous callers pass a no-op closure.
+    ///
+    /// Single-input transcription entry points share this decoder. Clear
+    /// reusable MLX buffers on return or cancellation so a long-running
+    /// process releases its scratch pool between requests.
     func generateText(
         audioEmbeds: MLXArray,
         textDecoder: QuantizedTextModel,
@@ -409,7 +438,28 @@ public class Qwen3ASRModel {
         decodingOptions: Qwen3DecodingOptions = Qwen3DecodingOptions(),
         checkCancellation: () throws -> Void
     ) rethrows -> String {
-        try checkCancellation()
+        defer {
+            // Speculative greedy work can still be running at EOS or
+            // cancellation. Wait for its buffers to become reusable before
+            // clearing the pool, after the decoder's local arrays are gone.
+            StreamOrDevice.default.stream.synchronize()
+            Memory.clearCache()
+        }
+        return try generateTextImpl(
+            audioEmbeds: audioEmbeds, textDecoder: textDecoder,
+            language: language, maxTokens: maxTokens, context: context,
+            decodingOptions: decodingOptions, checkCancellation: checkCancellation)
+    }
+
+    private func generateTextImpl(
+        audioEmbeds: MLXArray,
+        textDecoder: QuantizedTextModel,
+        language: String?,
+        maxTokens: Int,
+        context: String?,
+        decodingOptions: Qwen3DecodingOptions,
+        checkCancellation: () throws -> Void
+    ) rethrows -> String {
         let T = Qwen3ASRTokens.self
         let numAudioTokens = audioEmbeds.dim(1)
         var inputIds: [Int32] = []
@@ -581,14 +631,12 @@ public class Qwen3ASRModel {
     /// Greedy correctness invariant: argMax is deterministic, so this
     /// produces the exact same token sequence as the legacy loop on
     /// matching inputs.
-    static func generateGreedyAsyncEval(
-        textDecoder: QuantizedTextModel, initialLogits: MLXArray,
-        cache: [(MLXArray, MLXArray)], maxTokens: Int
-    ) -> [Int32] {
-        generateGreedyAsyncEval(textDecoder: textDecoder, initialLogits: initialLogits,
-                                cache: cache, maxTokens: maxTokens, checkCancellation: {})
-    }
-
+    ///
+    /// Cooperative cancellation: `checkCancellation` runs exactly once
+    /// before each token's decoder work is submitted — here for token 0
+    /// (the first `asyncEval` also forces the prefill), then inside the
+    /// loop before every speculative N+1 graph. A throw abandons the
+    /// in-flight step; nothing further is queued on the GPU.
     static func generateGreedyAsyncEval(
         textDecoder: QuantizedTextModel,
         initialLogits: MLXArray,
@@ -596,9 +644,9 @@ public class Qwen3ASRModel {
         maxTokens: Int,
         checkCancellation: () throws -> Void
     ) rethrows -> [Int32] {
-        try checkCancellation()
         var generatedTokens: [Int32] = []
         guard maxTokens > 0 else { return generatedTokens }
+        try checkCancellation()
 
         // Stage 0: argmax of the prefill's last logits. Stays lazy until
         // the first `.item()` below.
@@ -619,7 +667,6 @@ public class Qwen3ASRModel {
         let eosToken = Int32(Qwen3ASRTokens.eosTokenId)
 
         for step in 0..<maxTokens {
-            try checkCancellation()
             // Stage N+1's graph BEFORE syncing N. embedTokens expects a
             // [batch, seq] int32 tensor; nextTokenArr is 0-D so we expand
             // twice to [1, 1].
@@ -630,6 +677,7 @@ public class Qwen3ASRModel {
             var nextTokenArrN1: MLXArray? = nil
             var cacheN1: [(MLXArray, MLXArray)]? = nil
             if step + 1 < maxTokens {
+                try checkCancellation()
                 let nextEmbed = textDecoder.embedTokens(
                     nextTokenArr.expandedDimensions(axis: 0).expandedDimensions(axis: 0)
                 )
@@ -988,14 +1036,6 @@ public class Qwen3ASRModel {
     /// n-gram masking, and temperature sampling, so there's no benefit
     /// from `asyncEval` overlap.
     static func generateSlow(
-        textDecoder: QuantizedTextModel, initialLogits: MLXArray,
-        cache: [(MLXArray, MLXArray)], maxTokens: Int, options: Qwen3DecodingOptions
-    ) -> [Int32] {
-        generateSlow(textDecoder: textDecoder, initialLogits: initialLogits,
-                     cache: cache, maxTokens: maxTokens, options: options, checkCancellation: {})
-    }
-
-    static func generateSlow(
         textDecoder: QuantizedTextModel,
         initialLogits: MLXArray,
         cache initialCache: [(MLXArray, MLXArray)],
@@ -1003,11 +1043,15 @@ public class Qwen3ASRModel {
         options: Qwen3DecodingOptions,
         checkCancellation: () throws -> Void
     ) rethrows -> [Int32] {
-        try checkCancellation()
         var generatedTokens: [Int32] = []
         guard maxTokens > 0 else { return generatedTokens }
         var cache: [(MLXArray, MLXArray)]? = initialCache
 
+        // Cooperative cancellation: one checkpoint before each token's
+        // decoder work — here for token 0 (this pick forces the prefill),
+        // then per loop iteration after the EOS exit so natural termination
+        // never runs an extra checkpoint.
+        try checkCancellation()
         var nextToken = Self.pickNextToken(
             logits: initialLogits,
             generatedSoFar: generatedTokens,
@@ -1016,8 +1060,8 @@ public class Qwen3ASRModel {
         generatedTokens.append(nextToken)
 
         for _ in 1..<maxTokens {
-            try checkCancellation()
             if nextToken == Int32(Qwen3ASRTokens.eosTokenId) { break }
+            try checkCancellation()
 
             let tokenEmbeds = textDecoder.embedTokens(
                 MLXArray([nextToken]).expandedDimensions(axis: 0)
@@ -1234,6 +1278,14 @@ internal enum Qwen3ASRMemory {
         return max(0, min(fourGB, quarterRAM))
     }
 
+    /// The 0.6B variant needs a smaller scratch pool than 1.7B. Bound it
+    /// to `min(1 GB, 12.5% of physical RAM)` for repeated transcription.
+    static func cacheLimitForSmall(physicalMemoryBytes: Int) -> Int {
+        let oneGB = 1 * 1024 * 1024 * 1024
+        let eighthRAM = physicalMemoryBytes / 8
+        return max(0, min(oneGB, eighthRAM))
+    }
+
     /// True when the 1.7B variant should print the soft RAM warning. Total
     /// (not available) RAM is the pragmatic signal — see threshold doc.
     static func shouldWarnForLarge(physicalMemoryBytes: UInt64) -> Bool {
@@ -1325,10 +1377,12 @@ public extension Qwen3ASRModel {
         progressHandler?(0.80, "Loading tokenizer...")
 
         // Create model with appropriate config for detected size and bits
-        let model = Qwen3ASRModel(
-            audioConfig: modelSize.audioConfig,
-            textConfig: modelSize.textConfig(bits: detectedBits)
-        )
+        let model = withThrowawayRandomState {
+            Qwen3ASRModel(
+                audioConfig: modelSize.audioConfig,
+                textConfig: modelSize.textConfig(bits: detectedBits)
+            )
+        }
 
         // Load tokenizer from vocab.json
         let vocabPath = cacheDir.appendingPathComponent("vocab.json")
@@ -1353,32 +1407,15 @@ public extension Qwen3ASRModel {
 
         MetalBudget.pinMemory()
 
-        // Bug 4b: cap MLX scratch pool for the 1.7B variant. Default cache
-        // limit tracks `recommendedMaxWorkingSetSize` which on a 16 GB Mac
-        // can grow to several GB during sustained decoding and trigger
-        // swap. Bounding to `min(4 GB, 25% of physical RAM)` leaves enough
-        // headroom for per-token decoder working set while keeping the
-        // total residency under the OS jetsam threshold. 0.6B path is
-        // unchanged.
-        //
-        // Process-global cap leak fix (adversarial review): we save the
-        // prior limit on the model instance and restore it in `unload()`,
-        // so co-loaded models in the same process (e.g. PersonaPlex
-        // loading ASR + LM + TTS) inherit our cap only for the lifetime
-        // of the loaded ASR. Stacks correctly across multiple ASR
-        // instances: each save captures whatever was active when it
-        // loaded, and each unload pops its own saved value.
-        if modelSize == .large {
-            let physical = Int(ProcessInfo.processInfo.physicalMemory)
-            let newCap = Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: physical)
-            // Only apply the cap if it would lower the current limit —
-            // never raise a limit a caller has already chosen for itself.
-            let currentLimit = MLX.Memory.cacheLimit
-            if newCap > 0 && newCap < currentLimit {
-                model.savedMLXCacheLimit = currentLimit
-                MLX.Memory.cacheLimit = newCap
-            }
-        }
+        // Register both variants in the process-wide budget. The shared
+        // coordinator preserves the tightest live ceiling and the caller's
+        // budget, including when models unload in a different order.
+        let physical = Int(ProcessInfo.processInfo.physicalMemory)
+        let cacheCeiling = modelSize == .large
+            ? Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: physical)
+            : Qwen3ASRMemory.cacheLimitForSmall(physicalMemoryBytes: physical)
+        model.mlxCacheLimitLease = Qwen3ASRCacheLimitCoordinator.shared.acquire(
+            ceiling: cacheCeiling)
 
         // Bug 4f: post-load memory snapshot. Difference vs `memBeforeLoad`
         // is the model's load-time footprint (weights + activations +
