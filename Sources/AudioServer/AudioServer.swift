@@ -13,6 +13,7 @@ import NemotronStreamingASR
 import OmnilingualASR
 import KokoroTTS
 import VoxCPM2TTS
+import VoxtralTTS
 import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
@@ -220,7 +221,8 @@ public struct AudioServer {
             let samples: [Float]
             do {
                 samples = try await dispatchSynthesize(
-                    text: text, variant: variant, language: language, state: state)
+                    text: text, variant: variant, language: language, state: state,
+                    voice: variant.engine == "voxtral-tts" ? params.string("voice") : nil)
             } catch is CancellationError { throw CancellationError() }
             catch { return errorResponse(inferenceErrorDescription(error), status: inferenceErrorStatus(error)) }
 
@@ -394,6 +396,7 @@ protocol RealtimeModelLoading: Sendable {
     func loadCosyVoice(modelId: String) async throws -> CosyVoiceTTSModel
     func loadKokoro(modelId: String) async throws -> KokoroTTSModel
     func loadVoxCPM2(modelId: String) async throws -> VoxCPM2TTSModel
+    func loadVoxtralTTS(modelId: String) async throws -> VoxtralTTSModel
     func loadIndicMio(modelId: String) async throws -> IndicMioTTSModel
     func loadMagpie() async throws -> MagpieTTS
     func loadMagpieCoreML() async throws -> MagpieTTSCoreML
@@ -485,6 +488,10 @@ final class FailingRealtimeModelLoading: RealtimeModelLoading, @unchecked Sendab
         try await fail()
     }
 
+    func loadVoxtralTTS(modelId: String) async throws -> VoxtralTTSModel {
+        try await fail()
+    }
+
     func loadIndicMio(modelId: String) async throws -> IndicMioTTSModel {
         try await fail()
     }
@@ -521,8 +528,11 @@ final class FailingRealtimeModelLoading: RealtimeModelLoading, @unchecked Sendab
 final class ModelState: RealtimeModelLoading, @unchecked Sendable {
     let inferenceGate: InferenceGate
 
-    init(inferenceGate: InferenceGate = InferenceGate()) { self.inferenceGate = inferenceGate }
-    private let cache = ModelCache()
+    init(inferenceGate: InferenceGate = InferenceGate(), cache: ModelCache = ModelCache()) {
+        self.inferenceGate = inferenceGate
+        self.cache = cache
+    }
+    private let cache: ModelCache
     private let tokenizerLock = NSLock()
     private var tokenizer: SentencePieceDecoder?
     var spmDecoder: SentencePieceDecoder? {
@@ -637,6 +647,13 @@ final class ModelState: RealtimeModelLoading, @unchecked Sendable {
             print("[server] Loading VoxCPM2 (\(modelId))...")
             let m = try await VoxCPM2TTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
             return m
+        }
+    }
+
+    func loadVoxtralTTS(modelId: String) async throws -> VoxtralTTSModel {
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Voxtral TTS (\(modelId))...")
+            return try await VoxtralTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
         }
     }
 
@@ -1355,6 +1372,18 @@ func handleRealtimeWS(
                         : resample(samples, from: model.outputSampleRate, to: 24000)
                     totalSamples += try await streamSamplesAsDeltas(
                         samples24k, outbound: outbound, responseId: responseId)
+                case "voxtral-tts":
+                    let preset = try validatedVoxtralVoice(input?["voice"] as? String ?? session.voice, language: language)
+                    let normalized = try VoxtralTTSTokenizer.normalizedText(text)
+                    let model = try await runOffloaded {
+                        try await state.loadVoxtralTTS(modelId: ttsVariant.modelId)
+                    }
+                    try await model.generateStreaming(text: normalized, voice: preset) { chunk in
+                        if !chunk.samples.isEmpty {
+                            totalSamples += try await streamSamplesAsDeltas(
+                                chunk.samples, outbound: outbound, responseId: responseId)
+                        }
+                    }
                 case "indic-mio":
                     let samples = try await runOffloaded {
                         let model = try await state.loadIndicMio(modelId: ttsVariant.modelId)
@@ -1484,7 +1513,7 @@ private func sendRealtimeProcessingError(
     let detail = inferenceErrorDescription(error)
     try await sendRealtimeError(
         outbound: outbound,
-        type: "server_error",
+        type: inferenceErrorStatus(error) == .badRequest ? "invalid_request_error" : "server_error",
         message: "Realtime event '\(eventType)' failed: \(detail)",
         eventType: eventType)
 }
@@ -1778,6 +1807,11 @@ func dispatchSynthesize(
         return model.outputSampleRate == 24000
             ? samples
             : resample(samples, from: model.outputSampleRate, to: 24000)
+    case "voxtral-tts":
+        let preset = try validatedVoxtralVoice(voice, language: language)
+        let normalized = try VoxtralTTSTokenizer.normalizedText(text)
+        let model = try await state.loadVoxtralTTS(modelId: variant.modelId)
+        return try await model.generate(text: normalized, voice: preset)
     case "indic-mio":
         let model = try await state.loadIndicMio(modelId: variant.modelId)
         if let refAudio = cloneReferenceAudio, !refAudio.isEmpty {
@@ -1807,6 +1841,13 @@ func dispatchSynthesize(
     default:
         throw RealtimeDispatchError.engineNotEnabled(kind: "TTS", engine: variant.engine)
     }
+}
+
+func validatedVoxtralVoice(_ voice: String?, language: String) throws -> String {
+    let localVoice = voice.flatMap { resolvedLocalVoice($0, engine: "voxtral-tts") }
+    let preset = try localVoice ?? VoxtralTTSModel.voice(for: language)
+    guard VoxtralTTSModel.voices.contains(preset) else { throw VoxtralTTSError.unknownVoice(preset) }
+    return preset
 }
 
 /// Errors raised by the registry-driven dispatchers when an engine is
@@ -1990,5 +2031,11 @@ func formatJSON(_ dict: [String: Any]) -> String {
 
 func inferenceErrorStatus(_ error: Error) -> HTTPResponse.Status {
     if case InferenceGate.AdmissionError.queueFull = error { return .serviceUnavailable }
+    if let error = error as? VoxtralTTSError {
+        switch error {
+        case .invalidInput, .unknownVoice: return .badRequest
+        default: break
+        }
+    }
     return .internalServerError
 }

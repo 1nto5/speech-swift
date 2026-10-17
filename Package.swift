@@ -9,6 +9,7 @@ let package = Package(
     ],
     products: [
         .library(name: "SpeechRuntime", targets: ["SpeechRuntime"]),
+        .library(name: "VoxtralTTS", targets: ["VoxtralTTS"]),
         .library(name: "Qwen3ASRRuntime", targets: ["Qwen3ASRRuntime"]),
         .library(name: "GLiNER", targets: ["GLiNER"]),
         .library(name: "Clef", targets: ["Clef"]),
@@ -439,6 +440,19 @@ let package = Package(
             ]
         ),
         .target(
+            name: "VoxtralTTS",
+            dependencies: [
+                "AudioCommon", "MLXCommon", "SpeechRuntime",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+            ],
+            resources: [.copy("LICENSE-reference")]
+        ),
+        .testTarget(name: "VoxtralTTSTests", dependencies: ["VoxtralTTS", "Qwen3ASR", "AudioCommon"],
+                    resources: [.copy("Resources")]),
+        .target(
             name: "IndexTTS2TTS",
             dependencies: [
                 "AudioCommon",
@@ -791,6 +805,7 @@ let package = Package(
         .target(
             name: "AudioCLILib",
             dependencies: [
+                "VoxtralTTS",
                 "SpeechRuntime",
                 "Qwen3ASRRuntime",
                 "CohereTranscribeASR",
@@ -891,6 +906,7 @@ let package = Package(
         .target(
             name: "AudioServer",
             dependencies: [
+                "VoxtralTTS",
                 "SpeechRuntime",
                 "Qwen3ASRRuntime",
                 "Qwen3ASR",
@@ -1293,7 +1309,7 @@ let package = Package(
         .testTarget(
             name: "AudioServerTests",
             dependencies: [
-                "AudioServer", "SpeechRuntime"
+                "AudioServer", "SpeechRuntime", "VoxtralTTS"
             ],
             resources: [
                 .copy("Resources/test_audio.wav")
