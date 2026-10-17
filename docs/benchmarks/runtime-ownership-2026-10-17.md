@@ -1,8 +1,9 @@
 # Runtime ownership regression and performance verification
 
-The ownership changes were compared with `53510fb99661942b952184c1a744dcedc0a8fdb3`
+The initial ownership changes were compared with `53510fb99661942b952184c1a744dcedc0a8fdb3`
 on an Apple M5 Pro with 48 GiB of memory, macOS 26.6.2 and Swift 6.4.
-The candidate contains the runtime ownership changes described below. No weights,
+The initial candidate is `88fce9a`. The current-main integration is verified
+separately below. No weights,
 quantization settings or decoding defaults were changed.
 
 ## Issues found during verification
@@ -122,6 +123,72 @@ artifacts as `benchmark-results/runtime-ownership-20261017/published-summary.jso
 - The model-independent `SpeechRuntime` sources compiled for iOS 18 with
   strict Swift 6 code generation. This is not a full iOS package/app build.
 
+## Current-main integration
+
+The change was then integrated with main at
+`839127e237314d01fab392727261b9d9d3ba5951`; the production candidate is
+`c1ba66451ab264a01030e87755a023d758af56c1`. The adapter delegates to the
+existing cancellation-aware decoder and preserves main's MLX cache cleanup,
+checkpoint initialization and realtime server VAD handling.
+
+Validation after integration passed:
+
+- Hosted CI build and unit tests on `c1ba664`, plus all CodeQL checks.
+- Local CI-style selection: 1,665 tests executed, 42 skipped, zero failures.
+- Focused ownership, HTTP/WebSocket, VAD, CLI and playback selection:
+  182 tests, zero skips or failures. A new regression checks VAD-triggered
+  transcription sharing the HTTP inference lane while retaining automatic
+  language detection. The new server tests use the shared readiness/shutdown
+  fixture.
+- Isolated real MLX and CoreML runtime suites, including unloaded-model
+  errors, reloads, cancellation recovery and bounded repeated-call memory.
+- Five native decoder memory-cleanup tests, the real HTTP and WebSocket
+  Qwen3-ASR tests, and the standalone Thread Sanitizer stress check.
+- Debug CLI smoke checks for MLX and full CoreML returned the expected fixture
+  transcript.
+
+The release comparison was repeated against the integrated main revision
+using the same 40 English/French clips. This follow-up uses one measured pass
+per process after two warm-ups, in the same ABBA order followed by the native
+control. Each baseline/managed group has 80 samples per backend, with 160 exact
+transcript comparisons overall. Both builds use the same Metal 3.2/macOS 15
+shader library; the baseline build script verified its compiler/source hash.
+
+| Backend | Baseline weighted RTF | Managed weighted RTF | Change | Baseline / managed median | WER, both |
+|---|---:|---:|---:|---:|---:|
+| MLX INT4 | 0.01561 | 0.01580 | +1.2% | 145.32 / 143.78 ms | 11.936% |
+| Full CoreML | 0.13101 | 0.13212 | +0.8% | 1,301.00 / 1,307.72 ms | 7.237% |
+
+All 160 transcripts matched exactly. MLX p95 was 279.64 ms before and
+312.35 ms after; the native control built from the candidate measured
+311.87 ms. The native controls' weighted RTFs were 0.0161 for MLX and 0.1399
+for CoreML, showing that native timings also varied during the session.
+
+MLX peak physical footprint was approximately 2,536 MiB in both groups.
+CoreML's managed peak was 1,327 MiB versus 1,240 MiB in the baseline, an
+86 MiB increase in this run. Peak footprint includes allocator and framework
+caches; the repeated-call memory regression test still passed. The absolute
+memory readings include main's newer initialization/cache fixes and should
+be assessed against this fresh baseline.
+
+| Live API check | Current-main median | Managed median | Samples per version |
+|---|---:|---:|---:|
+| HTTP MLX transcription | 105.62 ms | 105.16 ms | 12 |
+| WebSocket MLX transcription | 106.39 ms | 106.64 ms | 12 |
+| HTTP Kokoro synthesis | 86.27 ms | 87.72 ms | 4 |
+| WebSocket Kokoro synthesis | 86.13 ms | 86.45 ms | 4 |
+
+Kokoro audio remained byte-identical for all four repetitions on each
+transport, with 73,800 samples per response. The largest observed TTS median
+increase was 1.45 ms; four timing samples provide limited tail-latency evidence.
+Four concurrent HTTP ASR requests completed at 109, 212, 315 and 419 ms,
+with 419.49 ms total wall time. Health-request medians were 0.585 ms before
+and 0.581 ms after. Explicit CoreML discovery and HTTP/WebSocket routing
+passed; its first HTTP call included 17.29 seconds of cached model loading,
+and subsequent calls took approximately 602–607 ms.
+
+Follow-up artifacts are retained in the local run's `current-main/` directory.
+
 ## Reproduction
 
 Create a separate baseline worktree at the revision above. From the changed
@@ -179,6 +246,8 @@ The manifest is a TSV containing absolute audio paths and reference text.
 It is constructed from the two cached language manifests described above.
 Raw per-utterance results, binary/manifest hashes, memory snapshots and logs
 are local artifacts under `benchmark-results/runtime-ownership-20261017/`.
+After verification they are archived locally at
+`~/Library/Logs/speech-swift/runtime-ownership-20261017/`.
 
 ## Limits
 

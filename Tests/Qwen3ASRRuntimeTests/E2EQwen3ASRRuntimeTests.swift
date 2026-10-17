@@ -14,6 +14,9 @@ final class E2EQwen3ASRRuntimeTests: XCTestCase {
         let native = try await Qwen3ASRModel.fromPretrained(offlineMode: true)
         let expected = native.transcribe(audio: audio, sampleRate: 16000, language: "english")
         native.unload()
+        XCTAssertThrowsError(try native.transcribeThrowing(audio: audio)) { error in
+            XCTAssertTrue(error is AudioModelError, "Unloaded models must report an inference error")
+        }
         XCTAssertTrue(expected.lowercased().contains("replacement"))
         XCTAssertTrue(expected.lowercased().contains("tomorrow"))
         let runtime = Qwen3ASRRuntime(offlineMode: true)
