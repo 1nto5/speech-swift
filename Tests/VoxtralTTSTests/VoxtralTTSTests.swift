@@ -10,6 +10,8 @@ final class VoxtralTTSConfigurationTests: XCTestCase {
         XCTAssertEqual(config.quantization?.bits, 4)
         XCTAssertEqual(config.transformer.layers, 26)
         XCTAssertEqual(config.audio.offsets.prefix(3), [0, 8194, 8217])
+        XCTAssertEqual(config.audio.offsets.count, 37)
+        XCTAssertEqual(config.audio.offsets.last, 8999)
         XCTAssertEqual(config.audio.embeddingCount, 9088)
         XCTAssertEqual(config.codec.samplesPerFrame, 1920)
     }

@@ -94,7 +94,13 @@ struct VoxtralAudioModelConfig: Decodable, Sendable {
         (semanticSize / 128 + 1) * 128 + ((acousticSize * acousticCodebooks + 127) / 128) * 128
     }
     var offsets: [Int32] {
-        [0] + (0..<acousticCodebooks).map { Int32(semanticSize + 2 + $0 * (acousticSize + 2)) }
+        let firstAcoustic = semanticSize + 2
+        let codebookWidth = acousticSize + 2
+        var result: [Int32] = [0]
+        for index in 0..<acousticCodebooks {
+            result.append(Int32(firstAcoustic + index * codebookWidth))
+        }
+        return result
     }
 }
 
