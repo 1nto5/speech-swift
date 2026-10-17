@@ -57,10 +57,14 @@ final class PreQuantizedLinearTests: XCTestCase {
                 eval(layer.parameters())
             }
         }
-        reload(times: 5)
-        let activeMemoryBefore = Memory.activeMemory
-        reload(times: 100)
-        XCTAssertEqual(Memory.activeMemory, activeMemoryBefore)
+        // Optimized builds may release the checkpoint after its last reload.
+        // Keep it alive so both readings include the same fixture buffers.
+        withExtendedLifetime(checkpoint) {
+            reload(times: 5)
+            let activeMemoryBefore = Memory.activeMemory
+            reload(times: 100)
+            XCTAssertEqual(Memory.activeMemory, activeMemoryBefore)
+        }
     }
 
     private func makeCheckpoint(prefix: String) -> [String: MLXArray] {

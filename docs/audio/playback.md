@@ -334,3 +334,9 @@ resident until consumed or reset; the synchronous scheduling API does not
 provide a producer memory budget. Resetting or stopping clears overflow too.
 This preserves all accepted samples and final words when synthesis runs ahead
 of playback. See [runtime contracts](../inference/model-runtime.md).
+
+
+`StreamingAudioPlayer.skipInitialSilence` defaults to `true` for codec warmup
+filtering. Set it to `false` when quiet leading chunks belong to the utterance.
+The Voxtral CLI streaming path uses this setting so playback accepts every chunk,
+with a 160 ms prebuffer. WAV output always preserves the unmodified PCM samples.

@@ -134,6 +134,10 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     /// Default 5 ms preserves the previous first-chunk fade behavior.
     public var startupFadeInDuration: Double = 0.005
 
+    /// Skip near-silent initial codec warmup chunks. Disable for streams whose
+    /// leading silence is part of the utterance and must be preserved.
+    public var skipInitialSilence: Bool = true
+
     /// Callback when all audio has finished playing.
     public var onPlaybackFinished: (() -> Void)?
 
@@ -220,7 +224,7 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
             var sumSq: Float = 0
             for s in samples { sumSq += s * s }
             let rms = sqrt(sumSq / Float(samples.count))
-            if rms < 0.005 { return }  // Only drop near-silence (codec init noise)
+            if skipInitialSilence && rms < 0.005 { return }
             isFirstChunk = false
             // Start from explicit silence and fade in the first real waveform to prevent pops/clicks.
             if let fmt = format {

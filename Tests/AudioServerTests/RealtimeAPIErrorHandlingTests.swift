@@ -84,6 +84,32 @@ final class RealtimeAPIErrorHandlingTests: XCTestCase {
     }
 }
 
+extension RealtimeAPIErrorHandlingTests {
+    func testVoxtralInvalidVoiceAndModelFailureKeepConnectionOpen() async throws {
+        let socket = try await connect()
+        defer { socket.cancel(with: .normalClosure, reason: nil) }
+        _ = try await receiveJSON(socket)
+        try await sendJSON(socket, ["type": "session.update", "session": ["model": "voxtral-tts", "voice": "missing"]])
+        _ = try await receiveJSON(socket)
+        try await sendJSON(socket, ["type": "response.create", "response": ["instructions": "Hello."]])
+        let created = try await receiveJSON(socket)
+        XCTAssertEqual(created["type"] as? String, "response.created")
+        let failure = try await receiveJSON(socket)
+        XCTAssertEqual((failure["error"] as? [String: Any])?["type"] as? String, "invalid_request_error")
+        try await sendJSON(socket, ["type": "session.update", "session": ["voice": "casual_male"]])
+        _ = try await receiveJSON(socket)
+        try await sendJSON(socket, ["type": "response.create", "response": ["instructions": "Hello."]])
+        _ = try await receiveJSON(socket)
+        let modelFailure = try await receiveJSON(socket)
+        let error = modelFailure["error"] as? [String: Any]
+        XCTAssertEqual(error?["type"] as? String, "server_error")
+        XCTAssertTrue((error?["message"] as? String)?.contains("forced realtime model failure") ?? false)
+        try await sendJSON(socket, ["type": "input_audio_buffer.clear"])
+        let cleared = try await receiveJSON(socket)
+        XCTAssertEqual(cleared["type"] as? String, "input_audio_buffer.cleared")
+    }
+}
+
 final class RealtimeAPIKeepaliveTests: XCTestCase {
     static let port = 19388
 
