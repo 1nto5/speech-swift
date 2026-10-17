@@ -1,3 +1,5 @@
+import SpeechRuntime
+import Qwen3ASRRuntime
 import Foundation
 import Qwen3ASR
 import Qwen3TTS
@@ -41,6 +43,17 @@ public struct ModelVariant: Sendable, Equatable {
     public let modelId: String
     public let aliases: [String]
     public let kind: Kind
+    public let descriptor: ModelDescriptor?
+
+    init(name: String, engine: String, modelId: String, aliases: [String], kind: Kind,
+         descriptor: ModelDescriptor? = nil) {
+        self.name = name
+        self.engine = engine
+        self.modelId = modelId
+        self.aliases = aliases
+        self.kind = kind
+        self.descriptor = descriptor
+    }
 
     public enum Kind: String, Sendable, Equatable, CaseIterable {
         /// Speech recognition (audio → text).
@@ -80,19 +93,19 @@ public let MODEL_REGISTRY: [ModelVariant] = [
     // ─── ASR ───────────────────────────────────────────────────────────────
     .init(name: "qwen3-asr-0.6b-mlx-int4",
           engine: "qwen3-asr",
-          modelId: Qwen3ASRModel.defaultModelId,
+          modelId: Qwen3ASRDescriptors.small.modelID,
           aliases: ["qwen3", "qwen3-asr", "qwen3-0.6b"],
-          kind: .asr),
+          kind: .asr, descriptor: Qwen3ASRDescriptors.small),
     .init(name: "qwen3-asr-1.7b-mlx-int8",
           engine: "qwen3-asr",
-          modelId: Qwen3ASRModel.largeModelId,
+          modelId: Qwen3ASRDescriptors.large.modelID,
           aliases: ["qwen3-1.7b", "qwen3-asr-1.7b"],
-          kind: .asr),
+          kind: .asr, descriptor: Qwen3ASRDescriptors.large),
     .init(name: "qwen3-asr-coreml",
           engine: "qwen3-asr",
-          modelId: Qwen3ASRModel.coreMLModelId,
+          modelId: Qwen3ASRDescriptors.coreML.modelID,
           aliases: ["qwen3-coreml", "qwen3-asr-0.6b-coreml"],
-          kind: .asr),
+          kind: .asr, descriptor: Qwen3ASRDescriptors.coreML),
     .init(name: "parakeet-tdt-v3-coreml-int8-30s",
           engine: "parakeet",
           modelId: ParakeetASRModel.defaultModelId,

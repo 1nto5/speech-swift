@@ -80,6 +80,19 @@ final class E2EOpenAITranscriptionsTests: XCTestCase {
 
     // MARK: - Tests
 
+    func testQwen3RuntimeTranscribesThroughHTTP() async throws {
+        let boundary = "----TestBoundary\(UUID().uuidString)"
+        let body = multipartBody(boundary: boundary, file: try testAudioData(),
+                                 fields: ["model": "qwen3", "language": "english"])
+        let (status, data, _) = try await post(path: "/v1/audio/transcriptions", body: body,
+                                             contentType: "multipart/form-data; boundary=\(boundary)")
+        XCTAssertEqual(status, 200, String(decoding: data, as: UTF8.self))
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let transcript = try XCTUnwrap(json?["text"] as? String).lowercased()
+        XCTAssertTrue(transcript.contains("replacement"), transcript)
+        XCTAssertTrue(transcript.contains("tomorrow"), transcript)
+    }
+
     func testMultipartJSON() async throws {
         let audio = try testAudioData()
         let boundary = "----TestBoundary\(UUID().uuidString)"

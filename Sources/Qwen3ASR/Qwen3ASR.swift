@@ -270,6 +270,29 @@ public class Qwen3ASRModel {
         sampleRate: Int = 16000,
         options: Qwen3DecodingOptions
     ) -> String {
+        transcribe(audio: audio, sampleRate: sampleRate, options: options, checkCancellation: {})
+    }
+
+    /// Throwing, cooperative-cancellation entry point for managed inference.
+    /// The existing synchronous APIs retain their decoding behavior.
+    public func transcribeThrowing(
+        audio: [Float],
+        sampleRate: Int = 16000,
+        options: Qwen3DecodingOptions = Qwen3DecodingOptions()
+    ) throws -> String {
+        try Task.checkCancellation()
+        guard _isLoaded, textDecoder != nil, tokenizer != nil else {
+            throw AudioModelError.inferenceFailed(operation: "transcribe", reason: "Model is not loaded")
+        }
+        return try transcribe(audio: audio, sampleRate: sampleRate, options: options,
+                              checkCancellation: { try Task.checkCancellation() })
+    }
+
+    private func transcribe(
+        audio: [Float], sampleRate: Int, options: Qwen3DecodingOptions,
+        checkCancellation: () throws -> Void
+    ) rethrows -> String {
+        try checkCancellation()
         let durationSeconds = sampleRate > 0
             ? Double(audio.count) / Double(sampleRate)
             : 0.0
@@ -277,19 +300,22 @@ public class Qwen3ASRModel {
 
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
         let batchedFeatures = melFeatures.expandedDimensions(axis: 0)
+        try checkCancellation()
         var audioEmbeds = audioEncoder(batchedFeatures)
         audioEmbeds = audioEmbeds.expandedDimensions(axis: 0)
         guard let textDecoder = textDecoder else {
             let shape = audioEmbeds.shape
             return "[Audio encoded: \(shape)] - Text decoder not loaded"
         }
-        return generateText(
+        try checkCancellation()
+        return try generateText(
             audioEmbeds: audioEmbeds,
             textDecoder: textDecoder,
             language: effective.language,
             maxTokens: effective.maxTokens,
             context: effective.context,
-            decodingOptions: effective
+            decodingOptions: effective,
+            checkCancellation: checkCancellation
         )
     }
 
@@ -365,13 +391,25 @@ public class Qwen3ASRModel {
     /// default `Qwen3DecodingOptions()` (repetition=1.0, no-repeat=0,
     /// temperature=0) behaviour is bit-identical to plain greedy.
     func generateText(
+        audioEmbeds: MLXArray, textDecoder: QuantizedTextModel,
+        language: String?, maxTokens: Int, context: String? = nil,
+        decodingOptions: Qwen3DecodingOptions = Qwen3DecodingOptions()
+    ) -> String {
+        generateText(audioEmbeds: audioEmbeds, textDecoder: textDecoder,
+                     language: language, maxTokens: maxTokens, context: context,
+                     decodingOptions: decodingOptions, checkCancellation: {})
+    }
+
+    func generateText(
         audioEmbeds: MLXArray,
         textDecoder: QuantizedTextModel,
         language: String?,
         maxTokens: Int,
         context: String? = nil,
-        decodingOptions: Qwen3DecodingOptions = Qwen3DecodingOptions()
-    ) -> String {
+        decodingOptions: Qwen3DecodingOptions = Qwen3DecodingOptions(),
+        checkCancellation: () throws -> Void
+    ) rethrows -> String {
+        try checkCancellation()
         let T = Qwen3ASRTokens.self
         let numAudioTokens = audioEmbeds.dim(1)
         var inputIds: [Int32] = []
@@ -425,6 +463,7 @@ public class Qwen3ASRModel {
         var cache: [(MLXArray, MLXArray)]? = nil
 
         // First pass: process the full input embeddings
+        try checkCancellation()
         let (hiddenStates, newCache) = textDecoder(inputsEmbeds: inputEmbeds, cache: cache)
         cache = newCache
 
@@ -441,19 +480,21 @@ public class Qwen3ASRModel {
         // manipulation, which would defeat the overlap.
         let generatedTokens: [Int32]
         if Self.isGreedyFastPath(decodingOptions) {
-            generatedTokens = Self.generateGreedyAsyncEval(
-                textDecoder: textDecoder,
-                initialLogits: logits,
-                cache: cache!,
-                maxTokens: maxTokens
-            )
-        } else {
-            generatedTokens = Self.generateSlow(
+            generatedTokens = try Self.generateGreedyAsyncEval(
                 textDecoder: textDecoder,
                 initialLogits: logits,
                 cache: cache!,
                 maxTokens: maxTokens,
-                options: decodingOptions
+                checkCancellation: checkCancellation
+            )
+        } else {
+            generatedTokens = try Self.generateSlow(
+                textDecoder: textDecoder,
+                initialLogits: logits,
+                cache: cache!,
+                maxTokens: maxTokens,
+                options: decodingOptions,
+                checkCancellation: checkCancellation
             )
         }
 
@@ -541,11 +582,21 @@ public class Qwen3ASRModel {
     /// produces the exact same token sequence as the legacy loop on
     /// matching inputs.
     static func generateGreedyAsyncEval(
+        textDecoder: QuantizedTextModel, initialLogits: MLXArray,
+        cache: [(MLXArray, MLXArray)], maxTokens: Int
+    ) -> [Int32] {
+        generateGreedyAsyncEval(textDecoder: textDecoder, initialLogits: initialLogits,
+                                cache: cache, maxTokens: maxTokens, checkCancellation: {})
+    }
+
+    static func generateGreedyAsyncEval(
         textDecoder: QuantizedTextModel,
         initialLogits: MLXArray,
         cache initialCache: [(MLXArray, MLXArray)],
-        maxTokens: Int
-    ) -> [Int32] {
+        maxTokens: Int,
+        checkCancellation: () throws -> Void
+    ) rethrows -> [Int32] {
+        try checkCancellation()
         var generatedTokens: [Int32] = []
         guard maxTokens > 0 else { return generatedTokens }
 
@@ -568,6 +619,7 @@ public class Qwen3ASRModel {
         let eosToken = Int32(Qwen3ASRTokens.eosTokenId)
 
         for step in 0..<maxTokens {
+            try checkCancellation()
             // Stage N+1's graph BEFORE syncing N. embedTokens expects a
             // [batch, seq] int32 tensor; nextTokenArr is 0-D so we expand
             // twice to [1, 1].
@@ -936,12 +988,22 @@ public class Qwen3ASRModel {
     /// n-gram masking, and temperature sampling, so there's no benefit
     /// from `asyncEval` overlap.
     static func generateSlow(
+        textDecoder: QuantizedTextModel, initialLogits: MLXArray,
+        cache: [(MLXArray, MLXArray)], maxTokens: Int, options: Qwen3DecodingOptions
+    ) -> [Int32] {
+        generateSlow(textDecoder: textDecoder, initialLogits: initialLogits,
+                     cache: cache, maxTokens: maxTokens, options: options, checkCancellation: {})
+    }
+
+    static func generateSlow(
         textDecoder: QuantizedTextModel,
         initialLogits: MLXArray,
         cache initialCache: [(MLXArray, MLXArray)],
         maxTokens: Int,
-        options: Qwen3DecodingOptions
-    ) -> [Int32] {
+        options: Qwen3DecodingOptions,
+        checkCancellation: () throws -> Void
+    ) rethrows -> [Int32] {
+        try checkCancellation()
         var generatedTokens: [Int32] = []
         guard maxTokens > 0 else { return generatedTokens }
         var cache: [(MLXArray, MLXArray)]? = initialCache
@@ -954,6 +1016,7 @@ public class Qwen3ASRModel {
         generatedTokens.append(nextToken)
 
         for _ in 1..<maxTokens {
+            try checkCancellation()
             if nextToken == Int32(Qwen3ASRTokens.eosTokenId) { break }
 
             let tokenEmbeds = textDecoder.embedTokens(

@@ -2,6 +2,7 @@ import Foundation
 import ArgumentParser
 import CohereTranscribeASR
 import Qwen3ASR
+import Qwen3ASRRuntime
 import ParakeetASR
 import NemotronStreamingASR
 import OmnilingualASR
@@ -313,12 +314,13 @@ public struct TranscribeCommand: ParsableCommand {
             print("  Loaded \(audio.count) samples (\(formatDuration(audio.count))s)")
 
             print("Loading model (\(sizeLabel)): \(modelId)")
-            let asrModel = try await Qwen3ASRModel.fromPretrained(
-                modelId: modelId, progressHandler: reportProgress)
+            let runtime = Qwen3ASRRuntime(
+                descriptor: Qwen3ASRDescriptors.mlx(modelID: modelId), progressHandler: reportProgress)
+            try await runtime.prepare()
 
             print("Transcribing...")
             let startTime = CFAbsoluteTimeGetCurrent()
-            let result = asrModel.transcribe(audio: audio, sampleRate: 24000, language: language, context: context)
+            let result = try await runtime.transcribe(audio: audio, sampleRate: 24000, language: language, context: context)
             let elapsed = CFAbsoluteTimeGetCurrent() - startTime
             let duration = Float(audio.count) / 24000.0
             let rtf = elapsed / Double(duration)
@@ -413,17 +415,18 @@ public struct TranscribeCommand: ParsableCommand {
 
             if #available(macOS 15, iOS 18, *) {
                 print("Loading full CoreML ASR pipeline...")
-                let asrModel = try await CoreMLASRModel.fromPretrained(
-                    progressHandler: reportProgress)
+                let runtime = Qwen3ASRRuntime(descriptor: Qwen3ASRDescriptors.coreML,
+                                               progressHandler: reportProgress)
+                try await runtime.prepare()
 
                 print("Warming up CoreML...")
                 let warmupStart = CFAbsoluteTimeGetCurrent()
-                try asrModel.warmUp()
+                try await runtime.prepare(warmUp: true)
                 let warmupTime = CFAbsoluteTimeGetCurrent() - warmupStart
 
                 print("Transcribing (full CoreML: encoder + decoder)...")
                 let startTime = CFAbsoluteTimeGetCurrent()
-                let result = try asrModel.transcribe(
+                let result = try await runtime.transcribe(
                     audio: audio, sampleRate: 16000, language: language)
                 let elapsed = CFAbsoluteTimeGetCurrent() - startTime
                 let rtf = elapsed / Double(duration)
@@ -606,18 +609,7 @@ public struct TranscribeCommand: ParsableCommand {
 
 /// Resolve shorthand model specifiers to HuggingFace model IDs.
 public func resolveASRModelId(_ specifier: String) -> String {
-    switch specifier.lowercased() {
-    case "0.6b", "small":
-        return ASRModelSize.small.defaultModelId
-    case "0.6b-8bit", "small-8bit":
-        return "aufklarer/Qwen3-ASR-0.6B-MLX-8bit"
-    case "1.7b", "large":
-        return ASRModelSize.large.defaultModelId
-    case "1.7b-4bit", "large-4bit":
-        return "aufklarer/Qwen3-ASR-1.7B-MLX-4bit"
-    default:
-        return specifier
-    }
+    Qwen3ASRDescriptors.resolveModelID(specifier)
 }
 
 /// Resolve Whisper model aliases to the CoreML repo layout used by WhisperASR.

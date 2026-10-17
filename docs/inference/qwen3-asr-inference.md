@@ -196,3 +196,10 @@ The model automatically detects the spoken language from the audio content. No l
 ## Model Architecture Reference
 
 See [docs/models/asr-model.md](../models/asr-model.md) for detailed architecture documentation including layer dimensions, weight formats, and quantization details.
+
+## Optional managed inference
+
+Import `Qwen3ASRRuntime` to use `Qwen3ASRDescriptors.small`, `.large`, or
+`.coreML` with serialized loading, inference, cancellation and unloading.
+The CLI MLX/full-CoreML paths and server Qwen3-ASR routes share this adapter.
+The native hybrid API remains available. See [runtime contracts](model-runtime.md).

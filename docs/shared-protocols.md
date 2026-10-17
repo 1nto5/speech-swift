@@ -631,3 +631,11 @@ Used in:
 6. **Separate `ForcedAlignmentModel`** — Distinct from `SpeechRecognitionModel` because input/output differ (audio+text → timestamps vs audio → text)
 7. **Document-only thread safety** — No locks or actors; document the single-threaded contract instead. This matches standard ML library practice (PyTorch, Core ML)
 8. **Sendable on value types** — Config structs with only primitive fields get `Sendable` so they can cross `Task` boundaries without warnings
+
+## Optional runtime ownership
+
+`SpeechRuntime` provides model descriptors, a bounded inference gate, shared
+lazy loading and an optional `ModelRuntime<Model>` owner. `Qwen3ASRRuntime`
+adapts MLX and full CoreML without changing existing protocol signatures.
+The default TTS stream now forwards consumer cancellation to its producer.
+See [ownership and error contracts](inference/model-runtime.md).
