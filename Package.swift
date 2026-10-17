@@ -8,6 +8,8 @@ let package = Package(
         .iOS("18.0")
     ],
     products: [
+        .library(name: "PocketTTS", targets: ["PocketTTS"]),
+        .executable(name: "pocket-tts-bench", targets: ["PocketTTSBenchmark"]),
         .library(name: "SpeechRuntime", targets: ["SpeechRuntime"]),
         .library(name: "VoxtralTTS", targets: ["VoxtralTTS"]),
         .library(name: "Qwen3ASRRuntime", targets: ["Qwen3ASRRuntime"]),
@@ -260,6 +262,10 @@ let package = Package(
         .package(url: "https://github.com/mlc-ai/xgrammar", exact: "0.2.7")
     ],
     targets: [
+        .target(name: "PocketTTS", dependencies: ["AudioCommon", "SpeechRuntime"],
+                exclude: ["THIRD_PARTY_NOTICES.md", "Apache-2.0.txt"]),
+        .testTarget(name: "PocketTTSTests", dependencies: ["PocketTTS", "AudioCommon"], resources: [.process("Resources")]),
+        .executableTarget(name: "PocketTTSBenchmark", dependencies: ["PocketTTS", "KokoroTTS", "AudioCommon"]),
         .target(name: "SpeechRuntime"),
         .target(name: "Qwen3ASRRuntime", dependencies: ["SpeechRuntime", "Qwen3ASR", "AudioCommon"]),
         .testTarget(name: "SpeechRuntimeTests", dependencies: ["SpeechRuntime"]),
@@ -805,6 +811,7 @@ let package = Package(
         .target(
             name: "AudioCLILib",
             dependencies: [
+                "PocketTTS",
                 "VoxtralTTS",
                 "SpeechRuntime",
                 "Qwen3ASRRuntime",
@@ -906,6 +913,7 @@ let package = Package(
         .target(
             name: "AudioServer",
             dependencies: [
+                "PocketTTS",
                 "VoxtralTTS",
                 "SpeechRuntime",
                 "Qwen3ASRRuntime",
@@ -1309,7 +1317,7 @@ let package = Package(
         .testTarget(
             name: "AudioServerTests",
             dependencies: [
-                "AudioServer", "SpeechRuntime", "VoxtralTTS"
+                "AudioServer", "SpeechRuntime", "VoxtralTTS", "PocketTTS"
             ],
             resources: [
                 .copy("Resources/test_audio.wav")

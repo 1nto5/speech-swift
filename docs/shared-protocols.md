@@ -741,3 +741,12 @@ lazy loading and an optional `ModelRuntime<Model>` owner. `Qwen3ASRRuntime`
 adapts MLX and full CoreML without changing existing protocol signatures.
 The default TTS stream now forwards consumer cancellation to its producer.
 See [ownership and error contracts](inference/model-runtime.md).
+
+## Pocket TTS
+
+`PocketTTSModel` conforms to `SpeechGenerationModel` with CPU-only CoreML defaults,
+24 kHz PCM, and incremental 80 ms frames. Its awaited streaming callback provides
+backpressure; completion emits one empty final marker. Cancellation, callback
+errors, and generation limits throw without successful completion. English and
+the Alba preset are supported by the initial bundle. See
+[Pocket TTS inference](inference/pocket-tts.md).
