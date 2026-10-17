@@ -159,8 +159,8 @@ func handleOpenAISpeech(
             speed: speechRequest.speed)
     } catch {
         return openAIErrorResponse(
-            "Speech synthesis failed: \(error.localizedDescription)",
-            status: .internalServerError)
+            "Speech synthesis failed: \(inferenceErrorDescription(error))",
+            status: inferenceErrorStatus(error))
     }
 
     do {

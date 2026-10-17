@@ -107,6 +107,7 @@ public class CoreMLASRModel {
         language: String? = nil,
         maxTokens: Int = 448
     ) throws -> String {
+        try Task.checkCancellation()
         let profile = ProcessInfo.processInfo.environment["COREML_ASR_PROFILE"] == "1"
         let t0 = CFAbsoluteTimeGetCurrent()
 
@@ -157,6 +158,7 @@ public class CoreMLASRModel {
         let chunk = decoder.prefillBatchSize
         var consumed = 0
         while consumed < numAudioTokens {
+            try Task.checkCancellation()
             let n = min(chunk, numAudioTokens - consumed)
             lastLogits = try decoder.decoderPrefill(
                 flatEmbeddings: audioEmbedsFlat,
@@ -201,6 +203,7 @@ public class CoreMLASRModel {
         generatedTokens.append(nextToken)
 
         for _ in 1..<maxTokens {
+            try Task.checkCancellation()
             if nextToken == imEndId { break }
             let embedding = try decoder.embed(tokenId: nextToken)
             logits = try decoder.decoderStep(embedding: embedding)
@@ -256,6 +259,7 @@ public class CoreMLASRModel {
         language: String? = nil,
         maxTokens: Int = 448
     ) throws -> String {
+        try Task.checkCancellation()
         // 1. Extract mel features (pure CPU via Accelerate — no MLXArray)
         let melFeatures = featureExtractor.processRaw(audio, sampleRate: sampleRate)
 
@@ -334,6 +338,7 @@ public class CoreMLASRModel {
         generatedTokens.append(nextToken)
 
         for _ in 1..<maxTokens {
+            try Task.checkCancellation()
             if nextToken == imEndId { break }
             let embedding = try decoder.embed(tokenId: nextToken)
             logits = try decoder.decoderStep(embedding: embedding)

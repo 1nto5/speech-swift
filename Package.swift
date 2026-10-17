@@ -8,6 +8,8 @@ let package = Package(
         .iOS("18.0")
     ],
     products: [
+        .library(name: "SpeechRuntime", targets: ["SpeechRuntime"]),
+        .library(name: "Qwen3ASRRuntime", targets: ["Qwen3ASRRuntime"]),
         .library(name: "GLiNER", targets: ["GLiNER"]),
         .library(name: "Clef", targets: ["Clef"]),
         .executable(name: "clef-decide", targets: ["ClefCLI"]),
@@ -257,6 +259,10 @@ let package = Package(
         .package(url: "https://github.com/mlc-ai/xgrammar", exact: "0.2.7")
     ],
     targets: [
+        .target(name: "SpeechRuntime"),
+        .target(name: "Qwen3ASRRuntime", dependencies: ["SpeechRuntime", "Qwen3ASR", "AudioCommon"]),
+        .testTarget(name: "SpeechRuntimeTests", dependencies: ["SpeechRuntime"]),
+        .testTarget(name: "Qwen3ASRRuntimeTests", dependencies: ["Qwen3ASRRuntime", "Qwen3ASR", "AudioCommon"]),
         .target(
             name: "AudioCommon",
             dependencies: [
@@ -785,6 +791,8 @@ let package = Package(
         .target(
             name: "AudioCLILib",
             dependencies: [
+                "SpeechRuntime",
+                "Qwen3ASRRuntime",
                 "CohereTranscribeASR",
                 "KyutaiSTT",
                 "Qwen3ASR",
@@ -883,6 +891,8 @@ let package = Package(
         .target(
             name: "AudioServer",
             dependencies: [
+                "SpeechRuntime",
+                "Qwen3ASRRuntime",
                 "Qwen3ASR",
                 "Qwen3TTS",
                 "Qwen3TTSCoreML",
@@ -1283,7 +1293,7 @@ let package = Package(
         .testTarget(
             name: "AudioServerTests",
             dependencies: [
-                "AudioServer"
+                "AudioServer", "SpeechRuntime"
             ],
             resources: [
                 .copy("Resources/test_audio.wav")

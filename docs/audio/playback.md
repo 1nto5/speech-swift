@@ -324,3 +324,13 @@ engine.connect(playerNode, to: engine.mainMixerNode, format: monoFormat)
 ```
 
 The engine's main mixer node automatically upmixes mono to stereo (or whatever the output hardware expects). This happens transparently — no manual channel mapping is needed. The mixer applies equal-power panning, placing the mono signal equally in both left and right channels.
+
+## Playback overflow
+
+Generated audio that exceeds the ring's free capacity is retained in an ordered
+overflow queue and drained by the render consumer. The ring capacity is a fast
+buffer size, not a maximum response duration. Large complete waveforms remain
+resident until consumed or reset; the synchronous scheduling API does not
+provide a producer memory budget. Resetting or stopping clears overflow too.
+This preserves all accepted samples and final words when synthesis runs ahead
+of playback. See [runtime contracts](../inference/model-runtime.md).

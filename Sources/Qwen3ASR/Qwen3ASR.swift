@@ -273,6 +273,21 @@ public class Qwen3ASRModel {
             checkCancellation: {})
     }
 
+    /// Throwing entry point that validates model readiness and cooperatively
+    /// observes cancellation using the native cancellation-aware decoder.
+    public func transcribeThrowing(
+        audio: [Float],
+        sampleRate: Int = 16000,
+        options: Qwen3DecodingOptions = Qwen3DecodingOptions()
+    ) throws -> String {
+        try Task.checkCancellation()
+        guard _isLoaded, textDecoder != nil, tokenizer != nil else {
+            throw AudioModelError.inferenceFailed(operation: "transcribe", reason: "Model is not loaded")
+        }
+        return try transcribeCheckingCancellation(
+            audio: audio, sampleRate: sampleRate, options: options)
+    }
+
     /// Cancellation-aware transcription for async callers.
     ///
     /// Decodes exactly like `transcribe(audio:sampleRate:options:)` but

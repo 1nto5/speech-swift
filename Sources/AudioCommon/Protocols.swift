@@ -139,15 +139,18 @@ extension SpeechGenerationModel {
     public func generateStream(text: String, language: String?) -> AsyncThrowingStream<AudioChunk, Error> {
         let rate = sampleRate
         return AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
+                    try Task.checkCancellation()
                     let samples = try await self.generate(text: text, language: language)
+                    try Task.checkCancellation()
                     continuation.yield(AudioChunk(samples: samples, sampleRate: rate, frameIndex: 0, isFinal: true))
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
                 }
             }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
         }
     }
 }

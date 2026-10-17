@@ -143,6 +143,21 @@ final class E2ERealtimeAPIEnginesTests: XCTestCase {
 
     // MARK: - TTS dispatch
 
+    func testQwen3RuntimeTranscribesThroughWebSocket() async throws {
+        let ws = try await connect()
+        defer { ws.cancel(with: .normalClosure, reason: nil) }
+        _ = try await receiveJSON(ws)
+        try await sendJSON(ws, ["type": "session.update", "session": ["model": "qwen3"]])
+        _ = try await receiveJSON(ws)
+        let pcm = try testAudioPCM16At24kHz()
+        try await sendJSON(ws, ["type": "input_audio_buffer.append", "audio": pcm.base64EncodedString()])
+        try await sendJSON(ws, ["type": "input_audio_buffer.commit"])
+        let response = try await drainResponse(ws)
+        let transcript = try XCTUnwrap(response.transcript).lowercased()
+        XCTAssertTrue(transcript.contains("replacement"), transcript)
+        XCTAssertTrue(transcript.contains("tomorrow"), transcript)
+    }
+
     /// Default Kokoro TTS produces non-empty audio.
     func testDefaultKokoroTTSSynthesizes() async throws {
         let ws = try await connect()

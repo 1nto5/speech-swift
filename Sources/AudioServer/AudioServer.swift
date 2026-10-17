@@ -22,6 +22,8 @@ import HibikiTranslate
 import SpeechEnhancement
 import SpeechVAD
 import AudioCommon
+import SpeechRuntime
+import Qwen3ASRRuntime
 
 // MARK: - Server
 
@@ -70,7 +72,9 @@ public struct AudioServer {
     }
 
     public func preloadModels() async throws {
-        _ = try await state.loadASR()
+        let permit = try await state.inferenceGate.acquire()
+        defer { permit.release() }
+        try await state.prepareQwen3ASR()
         _ = try await state.loadTTS()
         _ = try await state.loadPersonaPlex()
         _ = try await state.loadEnhancer()
@@ -81,6 +85,7 @@ public struct AudioServer {
     func buildRouter() -> Router<BasicRequestContext> {
         let router = Router()
         let state = self.state
+        let inferenceState = self.realtimeState
 
         router.get("/health") { _, _ in
             Response(
@@ -93,14 +98,16 @@ public struct AudioServer {
         // apart in shape.
         @Sendable
         func modelRow(_ v: ModelVariant) -> [String: Any] {
-            return [
-                "id": v.name,
-                "object": "model",
-                "engine": v.engine,
-                "kind": v.kind.rawValue,
-                "model_id": v.modelId,
-                "aliases": v.aliases
+            var row: [String: Any] = [
+                "id": v.name, "object": "model", "engine": v.engine,
+                "kind": v.kind.rawValue, "model_id": v.modelId, "aliases": v.aliases
             ]
+            if let descriptor = v.descriptor {
+                row["backend"] = descriptor.backend.rawValue
+                row["input_sample_rate"] = descriptor.inputSampleRate
+                row["streaming"] = descriptor.streaming.rawValue
+            }
+            return row
         }
 
         router.get("/v1/models") { _, _ in
@@ -129,7 +136,7 @@ public struct AudioServer {
         }
 
         router.post("/v1/audio/transcriptions") { request, _ in
-            try await handleOpenAITranscriptions(request: request, state: state)
+            try await handleOpenAITranscriptions(request: request, state: inferenceState)
         }
 
         router.post("/v1/audio/speech") { request, _ in
@@ -162,11 +169,20 @@ public struct AudioServer {
             }
 
             let sampleRate = params.int("sample_rate") ?? 16000
+            guard sampleRate > 0 else { return errorResponse("Sample rate must be positive", status: .badRequest) }
             let audio = try decodeWAVData(audioData, targetSampleRate: sampleRate)
             let language = params.string("language")
-            let text = try await dispatchTranscribe(
-                audio: audio, sampleRate: sampleRate,
-                variant: variant, language: language, state: state)
+            let text: String
+            do {
+                text = try await dispatchTranscribe(
+                    audio: audio, sampleRate: sampleRate,
+                    variant: variant, language: language, state: inferenceState)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                return errorResponse("Transcription failed: \(inferenceErrorDescription(error))",
+                                     status: inferenceErrorStatus(error))
+            }
 
             return jsonResponse([
                 "text": text,
@@ -201,8 +217,12 @@ public struct AudioServer {
                 variant = defaultVariant(forEngine: "kokoro", kind: .tts)
             }
             let language = params.string("language") ?? "english"
-            let samples = try await dispatchSynthesize(
-                text: text, variant: variant, language: language, state: state)
+            let samples: [Float]
+            do {
+                samples = try await dispatchSynthesize(
+                    text: text, variant: variant, language: language, state: state)
+            } catch is CancellationError { throw CancellationError() }
+            catch { return errorResponse(inferenceErrorDescription(error), status: inferenceErrorStatus(error)) }
 
             let wavData = try encodeWAV(samples: samples, sampleRate: 24000)
             return Response(
@@ -243,6 +263,11 @@ public struct AudioServer {
             let audio = try decodeWAVData(audioData, targetSampleRate: 24000)
             let responseAudio: [Float]
             var responseTranscript: String?
+            let permit: InferencePermit
+            do { permit = try await state.inferenceGate.acquire() }
+            catch is CancellationError { throw CancellationError() }
+            catch { return errorResponse(inferenceErrorDescription(error), status: inferenceErrorStatus(error)) }
+            defer { permit.release() }
             switch variant.engine {
             case "personaplex":
                 // PersonaPlex consumes a `voice` preset; Hibiki ignores it.
@@ -317,6 +342,11 @@ public struct AudioServer {
                 return errorResponse("Missing audio data", status: .badRequest)
             }
 
+            let permit: InferencePermit
+            do { permit = try await state.inferenceGate.acquire() }
+            catch is CancellationError { throw CancellationError() }
+            catch { return errorResponse(inferenceErrorDescription(error), status: inferenceErrorStatus(error)) }
+            defer { permit.release() }
             let enhancer = try await state.loadEnhancer(modelId: variant.modelId)
             let audio = try decodeWAVData(audioData, targetSampleRate: 48000)
             // Auto-chunk long inputs. The body cap of 50 MB allows roughly 4-5
@@ -352,6 +382,8 @@ func realtimeWebSocketServerConfiguration() -> WebSocketServerConfiguration {
 // MARK: - Lazy Model State
 
 protocol RealtimeModelLoading: Sendable {
+    var inferenceGate: InferenceGate { get }
+    func transcribeQwen3ASR(audio: [Float], sampleRate: Int, descriptor: ModelDescriptor, language: String?) async throws -> String
     func loadVAD() async throws -> any StreamingVADProvider
     func loadQwen3ASR(modelId: String) async throws -> Qwen3ASRModel
     func loadParakeet(modelId: String) async throws -> ParakeetASRModel
@@ -381,18 +413,29 @@ struct RealtimeModelLoadingFailure: Error, CustomStringConvertible {
 }
 
 final class FailingRealtimeModelLoading: RealtimeModelLoading, @unchecked Sendable {
+    let inferenceGate: InferenceGate
     let error: Error
     let beforeFailure: (@Sendable () -> Void)?
+    let qwenTranscription: (@Sendable ([Float], Int, String, String?) async throws -> String)?
     let vadOverride: (any StreamingVADProvider)?
 
     init(
         error: Error = RealtimeModelLoadingFailure(),
         beforeFailure: (@Sendable () -> Void)? = nil,
-        vadOverride: (any StreamingVADProvider)? = nil
+        vadOverride: (any StreamingVADProvider)? = nil,
+        inferenceGate: InferenceGate = InferenceGate(),
+        qwenTranscription: (@Sendable ([Float], Int, String, String?) async throws -> String)? = nil
     ) {
         self.error = error
         self.beforeFailure = beforeFailure
         self.vadOverride = vadOverride
+        self.inferenceGate = inferenceGate
+        self.qwenTranscription = qwenTranscription
+    }
+
+    func transcribeQwen3ASR(audio: [Float], sampleRate: Int, descriptor: ModelDescriptor, language: String?) async throws -> String {
+        if let qwenTranscription { return try await qwenTranscription(audio, sampleRate, descriptor.modelID, language) }
+        return try await fail()
     }
 
     private func fail<T>() async throws -> T {
@@ -476,29 +519,31 @@ final class FailingRealtimeModelLoading: RealtimeModelLoading, @unchecked Sendab
 }
 
 final class ModelState: RealtimeModelLoading, @unchecked Sendable {
-    // Per-modelId caches: switching variants of the same engine (e.g.
-    // qwen3-asr-0.6b → qwen3-asr-1.7b) keeps both loaded so flipping back
-    // is instant. The typical session picks one variant and sticks, but
-    // multi-tenant servers benefit from holding the small set warm.
-    private var qwen3ASR: [String: Qwen3ASRModel] = [:]
-    private var parakeet: [String: ParakeetASRModel] = [:]
-    private var parakeetStreaming: [String: ParakeetStreamingASRModel] = [:]
-    private var nemotron: [String: NemotronStreamingASRModel] = [:]
-    private var omnilingual: [String: OmnilingualASRModel] = [:]
-    private var qwen3TTS: [String: Qwen3TTSModel] = [:]
-    private var qwen3TTSCoreML: [String: Qwen3TTSCoreMLModel] = [:]
-    private var cosyvoice: [String: CosyVoiceTTSModel] = [:]
-    private var kokoro: [String: KokoroTTSModel] = [:]
-    private var voxcpm2: [String: VoxCPM2TTSModel] = [:]
-    private var indicMio: [String: IndicMioTTSModel] = [:]
-    private var magpie: MagpieTTS?
-    private var magpieCoreML: MagpieTTSCoreML?
-    private var vibevoice: [String: VibeVoiceTTSModel] = [:]
-    private var vibevoice15B: [String: VibeVoice15BTTSModel] = [:]
-    private var personaplex: PersonaPlexModel?
-    private var hibikiByModelId: [String: HibikiTranslateModel] = [:]
-    private var enhancer: SpeechEnhancer?
-    var spmDecoder: SentencePieceDecoder?
+    let inferenceGate: InferenceGate
+
+    init(inferenceGate: InferenceGate = InferenceGate()) { self.inferenceGate = inferenceGate }
+    private let cache = ModelCache()
+    private let tokenizerLock = NSLock()
+    private var tokenizer: SentencePieceDecoder?
+    var spmDecoder: SentencePieceDecoder? {
+        get { tokenizerLock.lock(); defer { tokenizerLock.unlock() }; return tokenizer }
+        set { tokenizerLock.lock(); defer { tokenizerLock.unlock() }; tokenizer = newValue }
+    }
+
+    func prepareQwen3ASR() async throws {
+        let descriptor = Qwen3ASRDescriptors.small
+        let runtime = try await cache.load(key: descriptor.backend.rawValue + ":" + descriptor.modelID) {
+            Qwen3ASRRuntime(descriptor: descriptor)
+        }
+        try await runtime.prepare()
+    }
+
+    func transcribeQwen3ASR(audio: [Float], sampleRate: Int, descriptor: ModelDescriptor, language: String?) async throws -> String {
+        let runtime = try await cache.load(key: descriptor.backend.rawValue + ":" + descriptor.modelID) {
+            Qwen3ASRRuntime(descriptor: descriptor)
+        }
+        return try await runtime.transcribe(audio: audio, sampleRate: sampleRate, language: language)
+    }
 
     func loadVAD() async throws -> any StreamingVADProvider {
         // Silero carries recurrent/context state. Give every websocket session
@@ -512,191 +557,176 @@ final class ModelState: RealtimeModelLoading, @unchecked Sendable {
     }
 
     func loadQwen3ASR(modelId: String) async throws -> Qwen3ASRModel {
-        if let m = qwen3ASR[modelId] { return m }
-        print("[server] Loading Qwen3-ASR (\(modelId))...")
-        let m = try await Qwen3ASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        qwen3ASR[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Qwen3-ASR (\(modelId))...")
+            let m = try await Qwen3ASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
-    /// Back-compat shim for the HTTP routes that still want the default
-    /// Qwen3-ASR build without naming a variant.
     func loadASR() async throws -> Qwen3ASRModel {
         try await loadQwen3ASR(modelId: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
     }
 
     func loadParakeet(modelId: String) async throws -> ParakeetASRModel {
-        if let m = parakeet[modelId] { return m }
-        print("[server] Loading Parakeet (\(modelId))...")
-        let m = try await ParakeetASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        parakeet[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Parakeet (\(modelId))...")
+            let m = try await ParakeetASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadParakeetStreaming(modelId: String) async throws -> ParakeetStreamingASRModel {
-        if let m = parakeetStreaming[modelId] { return m }
-        print("[server] Loading Parakeet EOU Streaming (\(modelId))...")
-        let m = try await ParakeetStreamingASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        parakeetStreaming[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Parakeet EOU Streaming (\(modelId))...")
+            let m = try await ParakeetStreamingASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadNemotron(modelId: String) async throws -> NemotronStreamingASRModel {
-        if let m = nemotron[modelId] { return m }
-        print("[server] Loading Nemotron Streaming ASR (\(modelId))...")
-        let m = try await NemotronStreamingASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        nemotron[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Nemotron Streaming ASR (\(modelId))...")
+            let m = try await NemotronStreamingASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadOmnilingual(modelId: String) async throws -> OmnilingualASRModel {
-        if let m = omnilingual[modelId] { return m }
-        print("[server] Loading Omnilingual ASR (\(modelId))...")
-        let m = try await OmnilingualASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        omnilingual[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Omnilingual ASR (\(modelId))...")
+            let m = try await OmnilingualASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadQwen3TTS(modelId: String) async throws -> Qwen3TTSModel {
-        if let m = qwen3TTS[modelId] { return m }
-        print("[server] Loading Qwen3-TTS (\(modelId))...")
-        let m = try await Qwen3TTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        qwen3TTS[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Qwen3-TTS (\(modelId))...")
+            let m = try await Qwen3TTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
-    /// Back-compat shim — default Qwen3-TTS bundle.
     func loadTTS() async throws -> Qwen3TTSModel {
         try await loadQwen3TTS(modelId: Qwen3TTSModel.defaultModelId)
     }
 
     func loadCosyVoice(modelId: String) async throws -> CosyVoiceTTSModel {
-        if let m = cosyvoice[modelId] { return m }
-        print("[server] Loading CosyVoice (\(modelId))...")
-        let m = try await CosyVoiceTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        cosyvoice[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading CosyVoice (\(modelId))...")
+            let m = try await CosyVoiceTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
-    /// Back-compat shim — default CosyVoice bundle for HTTP routes.
     func loadCosyVoice() async throws -> CosyVoiceTTSModel {
         try await loadCosyVoice(modelId: CosyVoiceTTSModel.defaultModelId)
     }
 
     func loadKokoro(modelId: String) async throws -> KokoroTTSModel {
-        if let m = kokoro[modelId] { return m }
-        print("[server] Loading Kokoro (\(modelId))...")
-        let m = try await KokoroTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        kokoro[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Kokoro (\(modelId))...")
+            let m = try await KokoroTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadVoxCPM2(modelId: String) async throws -> VoxCPM2TTSModel {
-        if let m = voxcpm2[modelId] { return m }
-        print("[server] Loading VoxCPM2 (\(modelId))...")
-        let m = try await VoxCPM2TTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        voxcpm2[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading VoxCPM2 (\(modelId))...")
+            let m = try await VoxCPM2TTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadIndicMio(modelId: String) async throws -> IndicMioTTSModel {
-        if let m = indicMio[modelId] { return m }
-        print("[server] Loading Indic-Mio (\(modelId))...")
-        let m = try await IndicMioTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        indicMio[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Indic-Mio (\(modelId))...")
+            let m = try await IndicMioTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
-    /// Magpie ships as a single fixed bundle today — `fromPretrained` takes
-    /// a `MagpieTTSVariant` enum, not an HF slug. The registry's modelId is
-    /// informational; the loader uses the variant default.
     func loadMagpie() async throws -> MagpieTTS {
-        if let m = magpie { return m }
-        print("[server] Loading Magpie-TTS Multilingual...")
-        let m = try await MagpieTTS.fromPretrained()
-        magpie = m
-        return m
+        return try await cache.load(key: "loadMagpie") {
+            print("[server] Loading Magpie-TTS Multilingual...")
+            let m = try await MagpieTTS.fromPretrained()
+            return m
+        }
     }
 
-    /// MagpieTTSCoreML uses a fixed CoreML bundle; like MLX-Magpie, no
-    /// per-modelId caching — there's one variant.
     func loadMagpieCoreML() async throws -> MagpieTTSCoreML {
-        if let m = magpieCoreML { return m }
-        print("[server] Loading Magpie-TTS CoreML...")
-        let m = try await MagpieTTSCoreML.fromPretrained()
-        magpieCoreML = m
-        return m
+        return try await cache.load(key: "loadMagpieCoreML") {
+            print("[server] Loading Magpie-TTS CoreML...")
+            let m = try await MagpieTTSCoreML.fromPretrained()
+            return m
+        }
     }
 
     func loadQwen3TTSCoreML(modelId: String) async throws -> Qwen3TTSCoreMLModel {
-        if let m = qwen3TTSCoreML[modelId] { return m }
-        print("[server] Loading Qwen3-TTS CoreML (\(modelId))...")
-        let m = try await Qwen3TTSCoreMLModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        qwen3TTSCoreML[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Qwen3-TTS CoreML (\(modelId))...")
+            let m = try await Qwen3TTSCoreMLModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadVibeVoice(modelId: String) async throws -> VibeVoiceTTSModel {
-        if let m = vibevoice[modelId] { return m }
-        print("[server] Loading VibeVoice Realtime (\(modelId))...")
-        var cfg = VibeVoiceTTSModel.Configuration()
-        cfg.modelId = modelId
-        let m = try await VibeVoiceTTSModel.fromPretrained(configuration: cfg, progressHandler: logProgress)
-        vibevoice[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading VibeVoice Realtime (\(modelId))...")
+            var cfg = VibeVoiceTTSModel.Configuration()
+            cfg.modelId = modelId
+            let m = try await VibeVoiceTTSModel.fromPretrained(configuration: cfg, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadVibeVoice15B(modelId: String) async throws -> VibeVoice15BTTSModel {
-        if let m = vibevoice15B[modelId] { return m }
-        print("[server] Loading VibeVoice 1.5B (\(modelId))...")
-        var cfg = VibeVoice15BTTSModel.Configuration()
-        cfg.modelId = modelId
-        let m = try await VibeVoice15BTTSModel.fromPretrained(configuration: cfg, progressHandler: logProgress)
-        vibevoice15B[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading VibeVoice 1.5B (\(modelId))...")
+            var cfg = VibeVoice15BTTSModel.Configuration()
+            cfg.modelId = modelId
+            let m = try await VibeVoice15BTTSModel.fromPretrained(configuration: cfg, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadHibiki(modelId: String) async throws -> HibikiTranslateModel {
-        if let m = hibikiByModelId[modelId] { return m }
-        print("[server] Loading Hibiki (\(modelId))...")
-        let m = try await HibikiTranslateModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        hibikiByModelId[modelId] = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading Hibiki (\(modelId))...")
+            let m = try await HibikiTranslateModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
     func loadPersonaPlex() async throws -> PersonaPlexModel {
-        if let m = personaplex { return m }
-        print("[server] Loading PersonaPlex 7B...")
-        let m = try await PersonaPlexModel.fromPretrained(progressHandler: logProgress)
-        personaplex = m
-        do {
-            // Resolve the SPM tokenizer cache dir from the LOADED model's
-            // modelId — not a hardcoded 4-bit repo. Same root cause as #300:
-            // 8-bit users were silently falling back to no-decoder mode
-            // because the cache dir lookup pointed at the wrong directory.
-            let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: m.modelId)
-            let spmPath = cacheDir.appendingPathComponent("tokenizer_spm_32k_3.model").path
-            if FileManager.default.fileExists(atPath: spmPath) {
-                spmDecoder = try SentencePieceDecoder(modelPath: spmPath)
-            }
-        } catch {}
-        return m
+        return try await cache.load(key: "loadPersonaPlex") { [self] in
+            print("[server] Loading PersonaPlex 7B...")
+            let m = try await PersonaPlexModel.fromPretrained(progressHandler: logProgress)
+            do {
+                // Resolve the SPM tokenizer cache dir from the LOADED model's
+                // modelId — not a hardcoded 4-bit repo. Same root cause as #300:
+                // 8-bit users were silently falling back to no-decoder mode
+                // because the cache dir lookup pointed at the wrong directory.
+                let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: m.modelId)
+                let spmPath = cacheDir.appendingPathComponent("tokenizer_spm_32k_3.model").path
+                if FileManager.default.fileExists(atPath: spmPath) {
+                    self.spmDecoder = try SentencePieceDecoder(modelPath: spmPath)
+                }
+            } catch {}
+            return m
+        }
     }
-
-    private var enhancerByModelId: [String: SpeechEnhancer] = [:]
 
     func loadEnhancer(modelId: String) async throws -> SpeechEnhancer {
-        if let m = enhancerByModelId[modelId] { return m }
-        print("[server] Loading DeepFilterNet3 (\(modelId))...")
-        let m = try await SpeechEnhancer.fromPretrained(modelId: modelId, progressHandler: logProgress)
-        enhancerByModelId[modelId] = m
-        // Mirror to the legacy slot too so back-compat callers see the
-        // last-loaded enhancer.
-        enhancer = m
-        return m
+        return try await cache.load(key: modelId) {
+            print("[server] Loading DeepFilterNet3 (\(modelId))...")
+            let m = try await SpeechEnhancer.fromPretrained(modelId: modelId, progressHandler: logProgress)
+            return m
+        }
     }
 
-    /// Back-compat shim — default DeepFilterNet3 bundle.
     func loadEnhancer() async throws -> SpeechEnhancer {
         try await loadEnhancer(modelId: SpeechEnhancer.defaultModelId)
     }
@@ -738,6 +768,7 @@ private final class RealtimeSession {
     /// new `asr_engine` / `tts_engine` / `s2s_engine` fields.
     var legacyEngine: String?
     var language: String = "english"
+    var explicitASRLanguage: String?
     /// PersonaPlex voice preset (e.g. "NATM0"). Only consulted when the
     /// active S2S engine is PersonaPlex.
     var voice: String?
@@ -998,6 +1029,7 @@ func handleRealtimeWS(
                     }
                     if let lang = sessionConfig["language"] as? String {
                         session.language = lang
+                        session.explicitASRLanguage = lang
                     }
                     if let v = sessionConfig["voice"] as? String, !v.isEmpty {
                         session.voice = v
@@ -1132,6 +1164,8 @@ func handleRealtimeWS(
                     state: state)
 
             case "response.create":
+                let permit = try await state.inferenceGate.acquire()
+                defer { permit.release() }
                 let input = json["response"] as? [String: Any]
                 let instructions = input?["instructions"] as? String
                 let modalities = input?["modalities"] as? [String] ?? ["audio", "text"]
@@ -1447,7 +1481,7 @@ private func sendRealtimeProcessingError(
     eventType: String,
     error: Error
 ) async throws {
-    let detail = realtimeErrorDescription(error)
+    let detail = inferenceErrorDescription(error)
     try await sendRealtimeError(
         outbound: outbound,
         type: "server_error",
@@ -1455,7 +1489,7 @@ private func sendRealtimeProcessingError(
         eventType: eventType)
 }
 
-private func realtimeErrorDescription(_ error: Error) -> String {
+func inferenceErrorDescription(_ error: Error) -> String {
     if let localized = error as? LocalizedError,
        let description = localized.errorDescription,
        !description.isEmpty {
@@ -1539,7 +1573,7 @@ private func commitRealtimeInputAudio(
     }
 
     let variant = session.asrVariant
-    let language = session.language
+    let language = variant.engine == "qwen3-asr" ? session.explicitASRLanguage : session.language
     let sampleRate = session.inputSampleRate
     let text = try await runOffloaded {
         try await dispatchTranscribe(
@@ -1656,11 +1690,8 @@ private func streamSamplesAsDeltas(
 /// the routing is single-sourced — a new ASR variant only has to be added
 /// to one place.
 ///
-/// Returns an empty string on engine-level errors (matching the WS path's
-/// `try?` shape) so the calling route can return an empty transcript
-/// rather than a 500. Task cancellation is the exception: the Qwen3-ASR
-/// path throws `CancellationError` at its next decoder checkpoint so an
-/// abandoned request releases the GPU instead of decoding to EOS.
+/// Inference failures propagate to the transport; a valid empty transcript
+/// remains a successful result.
 func dispatchTranscribe(
     audio: [Float],
     sampleRate: Int,
@@ -1668,25 +1699,31 @@ func dispatchTranscribe(
     language: String?,
     state: any RealtimeModelLoading
 ) async throws -> String {
+    let permit = try await state.inferenceGate.acquire()
+    defer { permit.release() }
+    try Task.checkCancellation()
     let audio16k: [Float] = sampleRate == 16000
         ? audio
         : resample(audio, from: sampleRate, to: 16000)
     switch variant.engine {
     case "parakeet":
         let model = try await state.loadParakeet(modelId: variant.modelId)
-        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: language)) ?? ""
+        return try model.transcribeAudio(audio16k, sampleRate: 16000, language: language)
     case "parakeet-streaming":
         let model = try await state.loadParakeetStreaming(modelId: variant.modelId)
-        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: language)) ?? ""
+        return try model.transcribeAudio(audio16k, sampleRate: 16000, language: language)
     case "nemotron":
         let model = try await state.loadNemotron(modelId: variant.modelId)
-        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: language)) ?? ""
+        return try model.transcribeAudio(audio16k, sampleRate: 16000, language: language)
     case "omnilingual":
         let model = try await state.loadOmnilingual(modelId: variant.modelId)
-        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: language)) ?? ""
+        return try model.transcribeAudio(audio16k, sampleRate: 16000, language: language)
     case "qwen3-asr":
-        let model = try await state.loadQwen3ASR(modelId: variant.modelId)
-        return try model.transcribeCheckingCancellation(audio: audio16k, sampleRate: 16000)
+        guard let descriptor = variant.descriptor else {
+            throw AudioModelError.invalidConfiguration(model: variant.name, reason: "Missing runtime descriptor")
+        }
+        return try await state.transcribeQwen3ASR(
+            audio: audio16k, sampleRate: 16000, descriptor: descriptor, language: language)
     default:
         throw RealtimeDispatchError.engineNotEnabled(kind: "ASR", engine: variant.engine)
     }
@@ -1708,6 +1745,9 @@ func dispatchSynthesize(
     cloneReferenceAudio: [Float]? = nil,
     cloneReferenceText: String? = nil
 ) async throws -> [Float] {
+    let permit = try await state.inferenceGate.acquire()
+    defer { permit.release() }
+    try Task.checkCancellation()
     switch variant.engine {
     case "kokoro":
         let model = try await state.loadKokoro(modelId: variant.modelId)
@@ -1946,4 +1986,9 @@ func formatJSON(_ dict: [String: Any]) -> String {
         return "{}"
     }
     return String(data: data, encoding: .utf8) ?? "{}"
+}
+
+func inferenceErrorStatus(_ error: Error) -> HTTPResponse.Status {
+    if case InferenceGate.AdmissionError.queueFull = error { return .serviceUnavailable }
+    return .internalServerError
 }
