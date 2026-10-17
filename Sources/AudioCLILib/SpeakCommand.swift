@@ -9,6 +9,7 @@ import IndexTTS2TTS
 import F5TTS
 import HiggsTTS
 import VoxtralTTS
+import FishAudioTTS
 import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
@@ -18,13 +19,13 @@ import SpeechRestoration
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, Voxtral, IndexTTS2, F5-TTS, Higgs, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, Voxtral, Fish Drama 3, IndexTTS2, F5-TTS, Higgs, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, voxtral, indextts2, f5, higgs, indic-mio, magpie, or magpie-coreml")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, voxtral, fish-drama3, indextts2, f5, higgs, indic-mio, magpie, or magpie-coreml")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
@@ -47,10 +48,10 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[qwen3] Style instruction (requires CustomVoice model)")
     public var instruct: String?
 
-    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, indextts2, f5, higgs, or indic-mio)")
+    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, fish-drama3, indextts2, f5, higgs, or indic-mio)")
     public var voiceSample: String?
 
-    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/f5/higgs/indic-mio references.")
+    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/fish-drama3/f5/higgs/indic-mio references.")
     public var cleanReference: Bool = false
 
     @Option(name: .long, help: "Sidon variant for --clean-reference: fp16 (default) or int8")
@@ -103,7 +104,7 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[cosyvoice] Crossfade between turns in seconds (default 0)")
     public var crossfade: Float = 0.0
 
-    @Option(name: .long, help: "[cosyvoice] MLX seed applied before each synthesis call. Fixes the flow-matching noise + Gumbel sampling + HiFiGAN init phase, so repeated calls with the same speaker embedding produce near-identical prosody and timbre across sections. Useful for long-form narration cut into chunks.")
+    @Option(name: .long, help: "[fish-drama3] Request-local sampling seed (default 0). [cosyvoice] MLX seed applied before each synthesis call. Fixes the flow-matching noise + Gumbel sampling + HiFiGAN init phase, so repeated calls with the same speaker embedding produce near-identical prosody and timbre across sections. Useful for long-form narration cut into chunks.")
     public var seed: UInt64?
 
     @Option(name: .long, help: "[cosyvoice] Path to speech_tokenizer.safetensors (S3-Tokenizer-v3). When supplied, --voice-sample is upgraded from spk-only cloning (cos~0.83 cap) to upstream zero-shot conditioning with prompt_token + prompt_feat (preserves identity through emotion changes). Auto-detected in the bundle's cache dir if omitted.")
@@ -169,6 +170,35 @@ public struct SpeakCommand: ParsableCommand {
 
     @Option(name: .long, help: "[voxtral] Codec frames per streaming chunk (default 3 = 240 ms of audio)")
     public var voxtralChunkFrames: Int = 3
+
+    // MARK: - Fish Audio Drama 3 options
+
+    @Option(name: .long, help: "[fish-drama3] HuggingFace MLX model ID")
+    public var fishDrama3ModelId: String = FishAudioDrama3Model.defaultModelId
+
+    @Option(name: .long, help: "[fish-drama3] Load a local exported MLX bundle")
+    public var fishDrama3BundleDir: String?
+
+    @Option(name: .long, help: "[fish-drama3] Exact transcript of --voice-sample")
+    public var fishDrama3ReferenceText: String?
+
+    @Option(name: .long, help: "[fish-drama3] Maximum generated frames; 2048 frames is about 95 seconds")
+    public var fishDrama3MaxFrames: Int = 2_048
+
+    @Option(name: .long, help: "[fish-drama3] Sampling temperature (default 1; 0 is greedy)")
+    public var fishDrama3Temperature: Float = 1
+
+    @Option(name: .long, help: "[fish-drama3] Top-k sampling (default 30)")
+    public var fishDrama3TopK: Int = 30
+
+    @Option(name: .long, help: "[fish-drama3] Nucleus sampling probability (default 0.9)")
+    public var fishDrama3TopP: Float = 0.9
+
+    @Option(name: .long, help: "[fish-drama3] Codec frames per streamed chunk (1–128; default 3, about 139 ms of audio)")
+    public var fishDrama3ChunkFrames: Int = 3
+
+    @Option(name: .long, help: "[fish-drama3] Memory policy: balanced (default) or unrestricted")
+    public var fishDrama3MemoryMode: String = "balanced"
 
     // MARK: - IndexTTS2-specific options
 
@@ -306,12 +336,28 @@ public struct SpeakCommand: ParsableCommand {
     public func validate() throws {
         let eng = engine.lowercased()
         guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2"
-                || eng == "voxtral"
+                || eng == "voxtral" || eng == "fish-drama3"
                 || eng == "indextts2" || eng == "f5" || eng == "higgs" || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'voxtral', 'indextts2', 'f5', 'higgs', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'voxtral', 'fish-drama3', 'indextts2', 'f5', 'higgs', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
+        }
+        if eng == "fish-drama3" {
+            guard ["balanced", "unrestricted"].contains(fishDrama3MemoryMode) else {
+                throw ValidationError("--fish-drama3-memory-mode must be 'balanced' or 'unrestricted'")
+            }
+            if batchFile != nil || listSpeakers || instruct != nil || speaker != nil {
+                throw ValidationError("--engine fish-drama3 requires complete input text; use inline emotion and <|speaker:N|> tags")
+            }
+            if (voiceSample == nil) != (fishDrama3ReferenceText == nil) {
+                throw ValidationError("--voice-sample and --fish-drama3-reference-text must be provided together")
+            }
+            try FishAudioDrama3Options(maxFrames: fishDrama3MaxFrames, temperature: fishDrama3Temperature,
+                                       topK: fishDrama3TopK, topP: fishDrama3TopP, seed: seed ?? 0,
+                                       streamingChunkFrames: fishDrama3ChunkFrames).validate()
+            if let text { try FishAudioDrama3Prompt.validateText(text) }
+            if let reference = fishDrama3ReferenceText { try FishAudioDrama3Prompt.validateText(reference) }
         }
         if eng == "voxtral" {
             if batchFile != nil {
@@ -487,6 +533,8 @@ public struct SpeakCommand: ParsableCommand {
 
     public func run() throws {
         switch engine.lowercased() {
+        case "fish-drama3":
+            try runFishDrama3()
         case "voxtral":
             try runVoxtral()
         case "cosyvoice":
@@ -1060,6 +1108,68 @@ public struct SpeakCommand: ParsableCommand {
                 }
             } else {
                 try await body()
+            }
+        }
+    }
+
+    // MARK: - Fish Audio Drama 3 engine
+
+    private func runFishDrama3() throws {
+        try runAsync {
+            guard let inputText = text else { throw ValidationError("Text is required for Fish Audio Drama 3") }
+            let model: FishAudioDrama3Model
+            let memoryOptions: FishAudioMemoryOptions = fishDrama3MemoryMode == "unrestricted" ? .unrestricted : .balanced
+            if let directory = fishDrama3BundleDir {
+                model = try await FishAudioDrama3Model.fromBundle(URL(fileURLWithPath: directory), memoryOptions: memoryOptions,
+                                                                progressHandler: reportProgress)
+            } else {
+                model = try await FishAudioDrama3Model.fromPretrained(modelId: fishDrama3ModelId, memoryOptions: memoryOptions,
+                                                                    progressHandler: reportProgress)
+            }
+            let options = FishAudioDrama3Options(maxFrames: fishDrama3MaxFrames, temperature: fishDrama3Temperature,
+                                                topK: fishDrama3TopK, topP: fishDrama3TopP, seed: seed ?? 0,
+                                                streamingChunkFrames: fishDrama3ChunkFrames)
+            let reference = try voiceSample.map { try loadReference(path: $0, targetSampleRate: model.sampleRate) }
+            let player = stream && play ? StreamingAudioPlayer() : nil
+            defer { player?.stop() }
+            if let player {
+                player.preBufferDuration = 0.16
+                player.skipInitialSilence = false
+                try player.start(sampleRate: Double(model.sampleRate))
+            }
+            let start = CFAbsoluteTimeGetCurrent()
+            var samples: [Float] = []
+            if stream {
+                var firstAudio: Double?
+                var chunks = 0
+                let deliver: (AudioChunk) async throws -> Void = { chunk in
+                    if !chunk.samples.isEmpty {
+                        if firstAudio == nil { firstAudio = CFAbsoluteTimeGetCurrent() - start }
+                        chunks += 1
+                        samples.append(contentsOf: chunk.samples)
+                        player?.scheduleChunk(chunk.samples)
+                        if verbose { print("  Chunk \(chunks): \(chunk.samples.count) samples, frame \(chunk.frameIndex)") }
+                    }
+                }
+                if let reference, let transcript = fishDrama3ReferenceText {
+                    try await model.generateStreaming(text: inputText, referenceAudio: reference,
+                        referenceSampleRate: model.sampleRate, referenceText: transcript, options: options, onChunk: deliver)
+                } else {
+                    try await model.generateStreaming(text: inputText, options: options, onChunk: deliver)
+                }
+                print(String(format: "  First audio: %.0f ms, chunks: %d", (firstAudio ?? 0) * 1000, chunks))
+            } else if let reference, let transcript = fishDrama3ReferenceText {
+                samples = try await model.generate(text: inputText, referenceAudio: reference,
+                    referenceSampleRate: model.sampleRate, referenceText: transcript, options: options)
+            } else { samples = try await model.generate(text: inputText, options: options) }
+            if let player {
+                let elapsed = CFAbsoluteTimeGetCurrent() - start
+                let duration = Double(samples.count) / Double(model.sampleRate)
+                print(String(format: "  %.2fs audio in %.2fs (RTF %.2f)", duration, elapsed, elapsed / duration))
+                player.markGenerationComplete()
+                while player.isPlaying { try await Task.sleep(for: .milliseconds(20)) }
+            } else {
+                try writeOrPlay(samples: samples, sampleRate: model.sampleRate, t0: start)
             }
         }
     }
