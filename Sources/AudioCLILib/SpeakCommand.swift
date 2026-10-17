@@ -9,6 +9,7 @@ import IndexTTS2TTS
 import F5TTS
 import HiggsTTS
 import VoxtralTTS
+import PocketTTS
 import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
@@ -18,13 +19,13 @@ import SpeechRestoration
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, Voxtral, IndexTTS2, F5-TTS, Higgs, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, Pocket TTS, Voxtral, IndexTTS2, F5-TTS, Higgs, Indic-Mio, or Magpie). For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, voxtral, indextts2, f5, higgs, indic-mio, magpie, or magpie-coreml")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, pocket, voxtral, indextts2, f5, higgs, indic-mio, magpie, or magpie-coreml")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
@@ -38,6 +39,18 @@ public struct SpeakCommand: ParsableCommand {
 
     @Flag(name: .long, help: "Play audio through default output device instead of (or in addition to) saving a file")
     public var play: Bool = false
+
+    @Option(name: .long, help: "[pocket] Local compiled CoreML bundle directory")
+    public var pocketBundleDir: String?
+
+    @Option(name: .long, help: "[pocket] HuggingFace CoreML bundle ID")
+    public var pocketModelId: String = PocketTTSModel.defaultModelId
+
+    @Option(name: .long, help: "[pocket] Deterministic noise seed (0 is valid)")
+    public var pocketSeed: UInt64 = 42
+
+    @Option(name: .long, help: "[pocket] Maximum frames per text chunk; exceeding the limit throws")
+    public var pocketMaxFrames: Int = 350
 
     // MARK: - Qwen3-specific options
 
@@ -59,7 +72,7 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[qwen3] Model variant: base (default), base-8bit, 1.7b (bf16), 1.7b-8bit, customVoice (bf16), or full HF model ID. Note: --speaker requires customVoice.")
     public var model: String = "base"
 
-    @Flag(name: .long, help: "[qwen3/voxtral] List available speakers and exit")
+    @Flag(name: .long, help: "[qwen3/pocket/voxtral] List available speakers and exit")
     public var listSpeakers: Bool = false
 
     @Option(name: .long, help: "[qwen3/indic-mio] Sampling temperature (default: 0.3)")
@@ -306,12 +319,20 @@ public struct SpeakCommand: ParsableCommand {
     public func validate() throws {
         let eng = engine.lowercased()
         guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2"
-                || eng == "voxtral"
+                || eng == "voxtral" || eng == "pocket"
                 || eng == "indextts2" || eng == "f5" || eng == "higgs" || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'voxtral', 'indextts2', 'f5', 'higgs', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'pocket', 'voxtral', 'indextts2', 'f5', 'higgs', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
+        }
+        if eng == "pocket" {
+            if batchFile != nil || voiceSample != nil || cleanReference || instruct != nil || speaker != nil {
+                throw ValidationError("--engine pocket supports one English text and the fixed Alba preset")
+            }
+            try PocketTTSOptions(seed: pocketSeed, maxFrames: pocketMaxFrames).validate()
+            try PocketTTSModel.validate(language: language)
+            if let text { try PocketTTSModel.validateInput(text: text, language: language) }
         }
         if eng == "voxtral" {
             if batchFile != nil {
@@ -487,6 +508,8 @@ public struct SpeakCommand: ParsableCommand {
 
     public func run() throws {
         switch engine.lowercased() {
+        case "pocket":
+            try runPocket()
         case "voxtral":
             try runVoxtral()
         case "cosyvoice":
@@ -1316,6 +1339,61 @@ public struct SpeakCommand: ParsableCommand {
                 print(String(format: "  First audio: %.0f ms, chunks: %d", (firstAudio ?? 0) * 1000, chunks))
             } else {
                 samples = try await model.generate(text: text, voice: voice, options: options)
+            }
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
+            let duration = Double(samples.count) / Double(model.sampleRate)
+            print(String(format: "  Duration: %.2fs, Time: %.2fs, RTF: %.3f", duration, elapsed, elapsed / duration))
+            if let player {
+                player.markGenerationComplete()
+                while player.isPlaying { try await Task.sleep(for: .milliseconds(20)) }
+            } else if play {
+                playAudio(samples: samples, sampleRate: model.sampleRate)
+            } else {
+                try WAVWriter.write(samples: samples, sampleRate: model.sampleRate, to: URL(fileURLWithPath: output))
+                print("Saved \(samples.count) samples to \(output)")
+            }
+        }
+    }
+
+    private func runPocket() throws {
+        if listSpeakers {
+            print("Pocket TTS preset voice: alba")
+
+            return
+        }
+        try runAsync {
+            guard let text else { throw ValidationError("Pocket TTS requires text") }
+            let model: PocketTTSModel
+            if let bundleDir = pocketBundleDir {
+                model = try PocketTTSModel.fromBundle(URL(fileURLWithPath: bundleDir))
+            } else {
+                model = try await PocketTTSModel.fromPretrained(modelId: pocketModelId, progressHandler: reportProgress)
+            }
+            let start = CFAbsoluteTimeGetCurrent()
+            let options = PocketTTSOptions(seed: pocketSeed, maxFrames: pocketMaxFrames)
+            let player = stream && play ? StreamingAudioPlayer() : nil
+            defer { player?.stop() }
+            if let player {
+                player.preBufferDuration = 0.16
+                player.skipInitialSilence = false
+                try player.start(sampleRate: Double(model.sampleRate))
+            }
+            var samples: [Float] = []
+            if stream {
+                var firstAudio: Double?
+                var chunks = 0
+                try await model.generateStreaming(text: text, language: language, options: options) { chunk in
+                    if !chunk.samples.isEmpty {
+                        if firstAudio == nil { firstAudio = CFAbsoluteTimeGetCurrent() - start }
+                        chunks += 1
+                        samples.append(contentsOf: chunk.samples)
+                        player?.scheduleChunk(chunk.samples)
+                        if verbose { print("  Chunk \(chunks): \(chunk.samples.count) samples, frame \(chunk.frameIndex)") }
+                    }
+                }
+                print(String(format: "  First audio: %.0f ms, chunks: %d", (firstAudio ?? 0) * 1000, chunks))
+            } else {
+                samples = try await model.generate(text: text, language: language, options: options)
             }
             let elapsed = CFAbsoluteTimeGetCurrent() - start
             let duration = Double(samples.count) / Double(model.sampleRate)

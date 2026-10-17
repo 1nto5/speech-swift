@@ -12,6 +12,7 @@ import OmnilingualASR
 import KokoroTTS
 import VoxCPM2TTS
 import VoxtralTTS
+import PocketTTS
 import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
@@ -144,6 +145,11 @@ public let MODEL_REGISTRY: [ModelVariant] = [
               "tts-1", "tts-1-hd", "gpt-4o-mini-tts",
               "gpt-4o-mini-tts-2025-12-15",
           ],
+          kind: .tts),
+    .init(name: "pocket-tts-100m-coreml-int8",
+          engine: "pocket-tts",
+          modelId: PocketTTSModel.defaultModelId,
+          aliases: ["pocket", "pocket-tts"],
           kind: .tts),
     .init(name: "voxtral-4b-tts-2603-mlx-4bit",
           engine: "voxtral-tts",
