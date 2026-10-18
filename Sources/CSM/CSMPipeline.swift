@@ -6,6 +6,7 @@ import Tokenizers
 import Hub
 import AudioCommon
 import PersonaPlex
+import MLXCommon
 
 // MARK: - CSM text→audio pipeline
 //
@@ -34,8 +35,9 @@ public final class CSMPipeline {
     }
 
     public init(directory: URL) async throws {
-        cfg = try CSMConfig.load(from: directory)
-        model = CSMModel(cfg)
+        let cfg = try CSMConfig.load(from: directory)
+        self.cfg = cfg
+        model = withThrowawayRandomState { CSMModel(cfg) }
         try CSMWeightLoader.load(model: model, from: directory)
         mimi = try CSMMimi.load(from: directory.appendingPathComponent("mimi.safetensors"),
                                 numCodebooks: cfg.audioNumCodebooks)
