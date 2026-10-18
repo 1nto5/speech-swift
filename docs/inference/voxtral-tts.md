@@ -65,6 +65,10 @@ for try await chunk in model.generateStream(text: "Hello, welcome to Voxtral.", 
 let local = try VoxtralTTSModel.fromBundle(URL(fileURLWithPath: "/path/to/bundle"))
 ```
 
+`fromPretrained` downloads the config, tokenizer, backbone weights and all 20
+preset files in `voice_embedding/`. With `offlineMode: true`, every bundle file
+must already be cached; missing files are reported before model weights load.
+
 The model conforms to `SpeechGenerationModel`. Its protocol `generate(text:language:)`
 selects a language's default male preset. Explicit voice synthesis uses the overload
 above. Both `generateStream` overloads deliver new PCM during generation. Each

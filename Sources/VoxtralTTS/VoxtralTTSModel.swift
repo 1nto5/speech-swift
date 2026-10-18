@@ -101,8 +101,9 @@ public final class VoxtralTTSModel: SpeechGenerationModel, @unchecked Sendable {
     ) async throws -> VoxtralTTSModel {
         try Task.checkCancellation()
         let directory = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
-        try await HuggingFaceDownloader.downloadWeights(modelId: modelId, to: directory,
-            additionalFiles: bundleFiles,
+        // Preset embeddings are required assets outside the backbone's weight index.
+        try await HuggingFaceDownloader.downloadFiles(modelId: modelId, to: directory,
+            files: bundleFiles,
             offlineMode: offlineMode, progressHandler: { progressHandler?($0, "Downloading Voxtral TTS") })
         try Task.checkCancellation()
         return try fromBundle(directory)
