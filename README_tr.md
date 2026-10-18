@@ -63,6 +63,7 @@ Speech Swift paketine doğrulanabilir biçimde başvuran 16 açık depo.
 - **[Kokoro TTS](https://soniqo.audio/guides/kokoro)** — Cihaz üzerinde TTS (82M, CoreML/Neural Engine, 54 ses, iOS için hazır, 10 dil)
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — Uzun biçimli / çok konuşmacılı TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 90 dakikaya kadar podcast/sesli kitap sentezi, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — Çok dilli TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB veya CoreML INT8 342 MB, 9 dil, 5 hazır konuşmacı, MLX'te akış)
+- **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — Akışlı konuşma sentezi ve döküm gerektirmeyen ses klonlama (CoreML, 48 kHz stereo, 80 ms parçalar, 367,6 MB derlenmiş modeller; macOS 15+ / iOS 18+)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — Cihaz üzerinde flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 dil, 10 ses, G2P-free, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Zero-shot ses klonlama özellikli çok dilli TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 GB, 23 çalışma zamanı dili; İbranice için niqqud gerekir, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — Zero-shot ses klonlama ile otoregresif olmayan difüzyon TTS (k2-fsa OmniVoice, Qwen3 omurgası, MLX fp16 varsayılan / int8 kullanılabilir, 600+ dil, Apache-2.0)

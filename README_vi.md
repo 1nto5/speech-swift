@@ -63,6 +63,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[Kokoro TTS](https://soniqo.audio/guides/kokoro)** — TTS trên thiết bị (82M, CoreML/Neural Engine, 54 giọng, sẵn sàng cho iOS, 10 ngôn ngữ)
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS định dạng dài / nhiều người nói (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, tổng hợp podcast/sách nói lên đến 90 phút, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS đa ngôn ngữ (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB hoặc CoreML INT8 342 MB, 9 ngôn ngữ, 5 giọng nói có sẵn, streaming trên MLX)
+- **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — Tổng hợp giọng nói trực tuyến và nhân bản giọng không cần bản chép (CoreML, stereo 48 kHz, khối 80 ms, mô hình biên dịch 367,6 MB; macOS 15+ / iOS 18+)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS flow-matching trên thiết bị (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 ngôn ngữ, 10 giọng, không cần G2P, 44,1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS đa ngôn ngữ với nhân bản giọng nói zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 GB, 23 ngôn ngữ runtime; tiếng Hebrew cần niqqud, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — TTS khuếch tán phi tự hồi quy với nhân bản giọng nói zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX fp16 mặc định / có int8, 600+ ngôn ngữ, Apache-2.0)

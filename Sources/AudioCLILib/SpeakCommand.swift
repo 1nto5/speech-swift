@@ -19,13 +19,13 @@ import SpeechRestoration
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, Pocket TTS, Voxtral, IndexTTS2, F5-TTS, Higgs, Indic-Mio, or Magpie). For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand."
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, Pocket TTS, Voxtral, IndexTTS2, F5-TTS, Higgs, Indic-Mio, Magpie, or MOSS-TTS-Nano). For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, pocket, voxtral, indextts2, f5, higgs, indic-mio, magpie, or magpie-coreml")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, pocket, voxtral, indextts2, f5, higgs, indic-mio, magpie, magpie-coreml, or moss-nano")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
@@ -60,10 +60,22 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[qwen3] Style instruction (requires CustomVoice model)")
     public var instruct: String?
 
-    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, indextts2, f5, higgs, or indic-mio)")
+    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, indextts2, f5, higgs, indic-mio, or moss-nano)")
     public var voiceSample: String?
 
-    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/f5/higgs/indic-mio references.")
+    @Option(name: .long, help: "[moss-nano] HuggingFace model ID or local compiled model directory")
+    public var mossNanoModel: String = "aufklarer/MOSS-TTS-Nano-100M-CoreML"
+
+    @Option(name: .long, help: "[moss-nano] CoreML compute units: cpu (default) or gpu (CPU+GPU)")
+    public var mossNanoComputeUnits: String = "cpu"
+
+    @Option(name: .long, help: "[moss-nano] Maximum 80 ms audio frames; reaching the limit raises an error")
+    public var mossNanoMaxFrames: Int = 300
+
+    @Option(name: .long, help: "[moss-nano] Reproducible Swift sampling seed")
+    public var mossNanoSeed: UInt64 = 0
+
+    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/f5/higgs/indic-mio/moss-nano references.")
     public var cleanReference: Bool = false
 
     @Option(name: .long, help: "Sidon variant for --clean-reference: fp16 (default) or int8")
@@ -320,11 +332,24 @@ public struct SpeakCommand: ParsableCommand {
         let eng = engine.lowercased()
         guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2"
                 || eng == "voxtral" || eng == "pocket"
-                || eng == "indextts2" || eng == "f5" || eng == "higgs" || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'pocket', 'voxtral', 'indextts2', 'f5', 'higgs', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
+                || eng == "indextts2" || eng == "f5" || eng == "higgs" || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" || eng == "moss-nano" else {
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'pocket', 'voxtral', 'indextts2', 'f5', 'higgs', 'indic-mio', 'magpie', 'magpie-coreml', or 'moss-nano'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
+        }
+        if eng == "moss-nano" {
+            guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  batchFile == nil, !listSpeakers else {
+                throw ValidationError("--engine moss-nano requires a single nonempty text argument")
+            }
+            guard ["cpu", "gpu"].contains(mossNanoComputeUnits), (1...65536).contains(mossNanoMaxFrames) else {
+                throw ValidationError("--moss-nano-compute-units must be cpu or gpu; --moss-nano-max-frames must be in 1...65536")
+            }
+            if speaker != nil || instruct != nil || language != nil {
+                throw ValidationError("--engine moss-nano infers language from text and uses --voice-sample for cloning; --speaker, --instruct and --language are unsupported")
+            }
+            if cleanReference && voiceSample == nil { throw ValidationError("--clean-reference requires --voice-sample") }
         }
         if eng == "pocket" {
             if batchFile != nil || voiceSample != nil || cleanReference || instruct != nil || speaker != nil {
@@ -528,6 +553,8 @@ public struct SpeakCommand: ParsableCommand {
             try runMagpie()
         case "magpie-coreml":
             try runMagpieCoreML()
+        case "moss-nano":
+            try runMossNano()
         default:
             try runQwen3()
         }

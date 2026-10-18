@@ -63,6 +63,7 @@
 - **[Kokoro TTS](https://soniqo.audio/zh/guides/kokoro)** — 端侧 TTS（82M，CoreML/神经引擎，54 种音色，iOS 就绪，10 种语言）
 - **[VibeVoice TTS](https://soniqo.audio/zh/guides/vibevoice)** — 长篇 / 多说话人 TTS（Microsoft VibeVoice Realtime-0.5B + 1.5B，MLX，可合成最长 90 分钟的播客 / 有声书，英语 / 中文）
 - **[Magpie TTS](https://soniqo.audio/zh/guides/magpie)** — 多语言 TTS（NVIDIA Magpie-TTS Multilingual 357M，MLX INT8 411 MB 或 CoreML INT8 342 MB，9 种语言，5 位预设说话人，MLX 端流式）
+- **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — 流式语音合成与免转录语音克隆（CoreML、48 kHz 立体声、80 ms 分块、367.6 MB 编译模型；macOS 15+ / iOS 18+）
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — 端侧流匹配 TTS（Supertone Supertonic-3 99M，CoreML/神经引擎，31 种语言，10 种音色，G2P-free，44.1 kHz）
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — 支持零样本声音克隆的多语言 TTS（Resemble AI Chatterbox Multilingual，MLX fp16 ~1.3 GB，23 种运行时语言；希伯来语需要 niqqud，MIT）
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — 支持零样本语音克隆的非自回归扩散 TTS（k2-fsa OmniVoice，Qwen3 骨干，MLX fp16 默认 / 可用 int8，600+ 种语言，Apache-2.0）
