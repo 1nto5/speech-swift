@@ -62,6 +62,7 @@
 - **[Kokoro TTS](https://soniqo.audio/guides/kokoro)** — TTS บนอุปกรณ์ (82M, CoreML/Neural Engine, 54 เสียง พร้อมใช้งานบน iOS, 10 ภาษา)
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS แบบยาว / หลายผู้พูด (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX สังเคราะห์พอดแคสต์/หนังสือเสียงได้นานสูงสุด 90 นาที, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS หลายภาษา (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB หรือ CoreML INT8 342 MB, 9 ภาษา, 5 ผู้พูดสำเร็จรูป สตรีมมิ่งบน MLX)
+- **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — สังเคราะห์เสียงแบบสตรีมและโคลนเสียงโดยไม่ต้องมีข้อความอ้างอิง (CoreML, สเตอริโอ 48 kHz, ช่วง 80 ms, โมเดลคอมไพล์ 367.6 MB; macOS 15+ / iOS 18+)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS แบบ flow-matching บนอุปกรณ์ (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 ภาษา, 10 เสียง, G2P-free, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS หลายภาษาพร้อมการโคลนเสียงแบบ zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 ภาษาที่รันไทม์; ภาษาฮีบรูต้องมี niqqud, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — TTS แบบ diffusion non-autoregressive พร้อมการโคลนเสียงแบบ zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX fp16 เป็นค่าเริ่มต้น / มี int8, 600+ ภาษา, Apache-2.0)

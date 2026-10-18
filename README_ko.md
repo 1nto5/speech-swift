@@ -62,6 +62,7 @@ Speech Swift 패키지 참조를 공개 소스에서 확인할 수 있는 저장
 - **[Kokoro TTS](https://soniqo.audio/ko/guides/kokoro)** — 온디바이스 TTS (82M, CoreML/Neural Engine, 54개 음색, iOS 지원, 10개 언어)
 - **[VibeVoice TTS](https://soniqo.audio/ko/guides/vibevoice)** — 장문 / 멀티 스피커 TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 최대 90분 팟캐스트 / 오디오북 합성, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ko/guides/magpie)** — 다국어 TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB 또는 CoreML INT8 342 MB, 9개 언어, 5개 내장 스피커, MLX 스트리밍)
+- **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — 스트리밍 음성 합성과 전사문 없는 음성 복제 (CoreML, 48 kHz 스테레오, 80 ms 청크, 컴파일 모델 367.6 MB, macOS 15+ / iOS 18+)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — 온디바이스 flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31개 언어, 10개 음색, G2P-free, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — 제로샷 음성 복제를 지원하는 다국어 TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 런타임 23개 언어, 히브리어는 niqqud 필요, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — 제로샷 음성 복제를 지원하는 비자기회귀 확산 TTS (k2-fsa OmniVoice, Qwen3 백본, MLX fp16 기본 / int8 사용 가능, 600+개 언어, Apache-2.0)

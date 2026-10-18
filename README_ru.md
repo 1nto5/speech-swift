@@ -62,6 +62,7 @@
 - **[Kokoro TTS](https://soniqo.audio/ru/guides/kokoro)** — Синтез речи на устройстве (82M, CoreML/Neural Engine, 54 голоса, готов для iOS, 10 языков)
 - **[VibeVoice TTS](https://soniqo.audio/ru/guides/vibevoice)** — Длинный формат / многоголосый TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, синтез подкастов/аудиокниг до 90 минут, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ru/guides/magpie)** — Многоязычный TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 МБ или CoreML INT8 342 МБ, 9 языков, 5 встроенных голосов, стриминг на MLX)
+- **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — Потоковый синтез речи и клонирование голоса без транскрипта (CoreML, стерео 48 кГц, блоки 80 мс, скомпилированные модели 367,6 МБ; macOS 15+ / iOS 18+)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — Синтез речи на устройстве на основе flow-matching (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 язык, 10 голосов, G2P-free, 44.1 кГц)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Многоязычный TTS с zero-shot клонированием голоса (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 ГБ, 23 языка в рантайме; для иврита нужен никкуд, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — Неавторегрессионный диффузионный TTS с zero-shot клонированием голоса (k2-fsa OmniVoice, бэкбон Qwen3, MLX fp16 по умолчанию / доступен int8, 600+ языков, Apache-2.0)

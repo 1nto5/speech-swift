@@ -47,13 +47,18 @@ public protocol SpeechGenerationModel: AnyObject {
 }
 ```
 
-**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `VoxCPM2TTSModel`, `KokoroTTSModel`, `IndexTTS2TTSModel`, `F5TTSModel`, `HiggsTTSModel`
+**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `VoxCPM2TTSModel`, `KokoroTTSModel`, `IndexTTS2TTSModel`, `F5TTSModel`, `HiggsTTSModel`, `MossTTSNanoModel`
 
 `IndexTTS2TTSModel` implements bundle loading, manifest validation, metadata access, and `ModelMemoryManageable`. It exposes a reference-audio `generate` overload for the expanded IndexTTS2 bundle and runs native reference conditioning, optional `IndexTTS2EmotionControl` preset/vector blending, `IndexTTS2SynthesisOptions` speaking-rate and internal-pause controls, semantic GPT beam sampling, S2Mel decoding, and BigVGAN vocoding. The protocol-only `generate(text:language:)` entry point throws a reference-required error because IndexTTS2 is a zero-shot voice-cloning model.
 
 `F5TTSModel` implements local bundle loading, config validation, `ModelMemoryManageable`, and a reference-audio `generate` overload for the exported F5-TTS bundle. The runtime prepares Vocos-style reference mels, samples target mels with the native DiT flow model, and decodes 24 kHz waveform audio with Vocos. The protocol-only `generate(text:language:)` entry point throws a reference-required error because F5-TTS requires reference audio plus a reference transcript.
 
 `HiggsTTSModel` implements bundle loading, `ModelMemoryManageable`, native reference encoding (`encodeReference`), and reference-audio `generate` overloads for the Higgs TTS 3 bundle. The runtime builds a `<|tts|>`-protocol prompt, samples delay-patterned 8-codebook frames with a Qwen3 backbone and fused codebook head, and decodes 24 kHz audio with the embedded Higgs codec. The protocol-only `generate(text:language:)` performs reference-free synthesis in a model-chosen voice; inline control tags ride inside the text.
+
+`MossTTSNanoModel` implements `SpeechGenerationModel` with mono downmix output and
+80 ms streaming chunks. Its `synthesize` / `synthesizeStream` methods preserve
+48 kHz stereo channels and accept reusable `MossTTSNanoReference` codes. Language
+is inferred from text (`language: nil`). See [MOSS-TTS-Nano inference](inference/moss-tts-nano.md).
 
 ### SpeechRecognitionModel (STT)
 

@@ -62,6 +62,7 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 - **[Kokoro TTS](https://soniqo.audio/pt/guides/kokoro)** — TTS no dispositivo (82M, CoreML/Neural Engine, 54 vozes, pronto para iOS, 10 idiomas)
 - **[VibeVoice TTS](https://soniqo.audio/pt/guides/vibevoice)** — TTS de formato longo / multi-alto-falante (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, sintese de podcast/audiolivro de ate 90 min, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/pt/guides/magpie)** — TTS multilíngue (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB ou CoreML INT8 342 MB, 9 idiomas, 5 oradores predefinidos, streaming em MLX)
+- **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — Síntese de voz em streaming e clonagem sem transcrição (CoreML, estéreo de 48 kHz, blocos de 80 ms, modelos compilados de 367,6 MB; macOS 15+ / iOS 18+)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS de flow-matching no dispositivo (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 idiomas, 10 vozes, sem G2P, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS multilíngue com clonagem de voz zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 GB, 23 idiomas em runtime; hebraico requer niqqud, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — TTS de difusao nao-autorregressiva com clonagem de voz zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX fp16 por padrão / int8 disponível, 600+ idiomas, Apache-2.0)
