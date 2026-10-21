@@ -158,6 +158,7 @@ let package = Package(
             name: "MagpieTTSCoreML",
             targets: ["MagpieTTSCoreML"]
         ),
+        .library(name: "MossTTSNano", targets: ["MossTTSNano"]),
         .library(
             name: "OmnilingualASR",
             targets: ["OmnilingualASR"]
@@ -674,6 +675,7 @@ let package = Package(
                 .product(name: "MLXRandom", package: "mlx-swift"),
             ]
         ),
+        .target(name: "MossTTSNano", dependencies: ["AudioCommon"]),
         .target(
             name: "OmnilingualASR",
             dependencies: [
@@ -853,6 +855,7 @@ let package = Package(
                 "MagpieTTS",
                 "MagpieTTSCoreML",
                 "MADLADTranslation",
+                "MossTTSNano",
                 "GLiNER",
                 "Clef",
                 "SpeechWakeWord",
@@ -1283,6 +1286,8 @@ let package = Package(
             ],
             resources: [.process("Resources")]
         ),
+        .testTarget(name: "MossTTSNanoTests", dependencies: ["MossTTSNano", "AudioCommon", "Qwen3ASR"],
+                    resources: [.process("Resources")]),
         .testTarget(
             name: "Qwen3ChatTests",
             dependencies: [

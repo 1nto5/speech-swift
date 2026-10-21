@@ -117,6 +117,24 @@ final class E2EFishAudioCodecStreamingTests: XCTestCase {
         XCTAssertEqual(try lazy.encode(audio: reference), referenceCodes)
     }
 
+    func testFullTowerVocabularyMatchesBufferedResidualClamping() throws {
+        guard let path = ProcessInfo.processInfo.environment["FISH_DRAMA3_BUNDLE"] else {
+            throw XCTSkip("Set FISH_DRAMA3_BUNDLE to a local codec bundle")
+        }
+        let codec = try FishAudioCodec.load(from: URL(fileURLWithPath: path))
+        let codes = FishAudioGeneratedCodebooks(codes: [[0, 1, 4095]] + Array(repeating: [0, 1024, 4095], count: 9))
+        let expected = try codec.decode(codes)
+        var state = FishAudioCodecStreamingState()
+        var actual: [Float] = []
+        for frame in 0..<3 {
+            let chunk = FishAudioGeneratedCodebooks(codes: codes.codes.map { [$0[frame]] })
+            actual += try codec.decodeStreaming(chunk, state: &state)
+        }
+        XCTAssertEqual(actual.count, expected.count)
+        let maximum = zip(actual, expected).map { abs($0 - $1) }.max() ?? .infinity
+        XCTAssertLessThan(maximum, 2e-4)
+    }
+
     func testReleasedCodecFullAndStreamingParityIncludingWindowRollover() throws {
         guard let path = ProcessInfo.processInfo.environment["FISH_DRAMA3_BUNDLE"] else {
             throw XCTSkip("Set FISH_DRAMA3_BUNDLE to a local codec bundle")
@@ -138,7 +156,11 @@ final class E2EFishAudioCodecStreamingTests: XCTestCase {
             }
             XCTAssertEqual(audio.count, expected.count)
             let maximum = zip(audio, expected).map { abs($0 - $1) }.max() ?? .infinity
-            let rms = sqrt(zip(audio, expected).map { ($0 - $1) * ($0 - $1) }.reduce(0, +) / Float(expected.count))
+            let squaredError: Float = zip(audio, expected).reduce(0) { sum, pair in
+                let difference = pair.0 - pair.1
+                return sum + difference * difference
+            }
+            let rms = sqrt(squaredError / Float(expected.count))
             print("Fish DAC streaming chunk \(size): max error \(maximum), RMS \(rms)")
             XCTAssertLessThan(maximum, 2e-4)
             XCTAssertLessThan(rms, 2e-5)
@@ -147,5 +169,6 @@ final class E2EFishAudioCodecStreamingTests: XCTestCase {
         XCTAssertEqual(try codec.decodeStreaming(.init(codes: Array(repeating: [], count: 10)), state: &state), [])
         XCTAssertThrowsError(try codec.decodeStreaming(.init(codes: [[1], []]), state: &state))
         XCTAssertThrowsError(try codec.decodeStreaming(.init(codes: [[4096]] + Array(repeating: [0], count: 9)), state: &state))
+        XCTAssertThrowsError(try codec.decodeStreaming(.init(codes: [[0], [4096]] + Array(repeating: [0], count: 8)), state: &state))
     }
 }

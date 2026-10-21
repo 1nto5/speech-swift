@@ -111,11 +111,13 @@ extension FishAudioCodec {
         let count = generated.frameCount
         guard generated.codebookCount == FishAudioCodecDefaults.totalCodebooks,
               generated.codes.allSatisfy({ $0.count == count }),
-              generated.codes.enumerated().allSatisfy({ index, row in
-                  row.allSatisfy { $0 >= 0 && $0 < (index == 0 ? 4096 : 1024) }
+              generated.codes.allSatisfy({ row in
+                  row.allSatisfy { $0 >= 0 && $0 < FishAudioCodecDefaults.semanticCodebookSize }
               }) else { throw FishAudioError.invalidCodebookShape("invalid streaming codec frames") }
         guard count > 0 else { return [] }
         let codes = MLXArray(generated.codes.flatMap { $0.map(Int32.init) }).reshaped(1, generated.codebookCount, count)
+        // Tower heads use 4096 values; residual quantizers clamp to their codec
+        // codebooks, matching buffered decoding.
         var h = quantizer.semanticQuantizer.decode(codes[0..., 0..<1, 0...])
             + quantizer.quantizer.decode(codes[0..., 1..., 0...])
         h = quantizer.postModule.streaming(h, state: &state)

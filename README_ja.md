@@ -63,6 +63,7 @@ Speech Swift パッケージへの参照を公開ソースで確認できる 16 
 - **[Kokoro TTS](https://soniqo.audio/ja/guides/kokoro)** — オンデバイスTTS（82M、CoreML/Neural Engine、54ボイス、iOS対応、10言語）
 - **[VibeVoice TTS](https://soniqo.audio/ja/guides/vibevoice)** — 長尺・マルチスピーカーTTS（Microsoft VibeVoice Realtime-0.5B + 1.5B、MLX、最長90分のポッドキャスト／オーディオブック生成、EN/ZH）
 - **[Magpie TTS](https://soniqo.audio/ja/guides/magpie)** — 多言語 TTS（NVIDIA Magpie-TTS Multilingual 357M、MLX INT8 411 MB または CoreML INT8 342 MB、9 言語、5 つの組み込みスピーカー、MLX でストリーミング）
+- **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — ストリーミング音声合成と文字起こし不要の音声クローン（CoreML、48 kHz ステレオ、80 ms チャンク、コンパイル済みモデル 367.6 MB、macOS 15+ / iOS 18+）
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — オンデバイスのフローマッチングTTS（Supertone Supertonic-3 99M、CoreML/Neural Engine、31言語、10ボイス、G2P-free、44.1 kHz）
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ゼロショット音声クローン対応の多言語TTS（Resemble AI Chatterbox Multilingual、MLX fp16 ~1.3 GB、23ランタイム言語、ヘブライ語はニクダーが必要、MIT）
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — ゼロショット音声クローンに対応した非自己回帰拡散TTS（k2-fsa OmniVoice、Qwen3バックボーン、MLX fp16デフォルト / int8利用可、600+言語、Apache-2.0）

@@ -48,6 +48,14 @@ public struct FishAudioDrama3Config: Sendable {
             }
             return value.floatValue
         }
+        func rotaryDimensions(_ headDim: Int, factor: Float) throws -> Int {
+            let width = (Double(headDim) * Double(factor)).rounded(.towardZero)
+            guard factor <= 1, let dimensions = Int(exactly: width),
+                  dimensions > 0, dimensions <= headDim, dimensions % 2 == 0 else {
+                throw invalid("invalid rotary dimensions")
+            }
+            return dimensions
+        }
         func flags(_ object: [String: Any], _ required: [String: Bool]) throws {
             for (key, expected) in required where (object[key] as? Bool ?? expected) != expected {
                 throw invalid("unsupported \(key)")
@@ -77,7 +85,7 @@ public struct FishAudioDrama3Config: Sendable {
               (t["mlp_layer_types"] as? [String] ?? Array(repeating: "moe", count: layers)) == Array(repeating: "moe", count: layers)
         else { throw invalid("invalid layer types") }
         let textHeadDim = try integer(t, "head_dim")
-        let textRotary = Int(Float(textHeadDim) * (try scalar(rope, "partial_rotary_factor")))
+        let textRotary = try rotaryDimensions(textHeadDim, factor: scalar(rope, "partial_rotary_factor"))
         let text = try Text(
             vocabularySize: integer(t, "vocab_size"), hiddenSize: integer(t, "hidden_size"), layerCount: layers,
             layerTypes: types, attentionHeads: integer(t, "num_attention_heads"),
@@ -94,7 +102,7 @@ public struct FishAudioDrama3Config: Sendable {
         let tower = try Tower(
             hiddenSize: integer(a, "dim"), intermediateSize: integer(a, "intermediate_size"),
             attentionHeads: integer(a, "n_head"), keyValueHeads: integer(a, "n_local_heads"),
-            headDim: headDim, rotaryDim: Int(Float(headDim) * scalar(a, "rotary_percent")),
+            headDim: headDim, rotaryDim: rotaryDimensions(headDim, factor: scalar(a, "rotary_percent")),
             ropeTheta: scalar(a, "rope_base"), normEps: scalar(a, "norm_eps"),
             vocabularySize: integer(a, "vocab_size"), codebookCount: integer(a, "num_codebooks"),
             sharedLayerCount: integer(a, "shared_enrichment_layers"), backboneCodebooks: count)

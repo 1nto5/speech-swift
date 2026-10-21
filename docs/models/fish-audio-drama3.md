@@ -69,6 +69,10 @@ positions. State is released at request completion, cancellation or delivery
 failure. The final convolution tail is trimmed exactly as in full decoding.
 Callbacks apply backpressure; the async iterator decodes on demand.
 
+The tower uses a 4,096-token vocabulary for each codebook. Buffered and streaming
+Fish DAC decoding both clamp residual codes to the codec's 1,024-entry residual
+codebooks. Returned codebooks retain the tower's original token values.
+
 ## Memory management
 
 Drama 3 uses `FishAudioMemoryOptions.balanced` by default. It evaluates codec

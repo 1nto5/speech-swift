@@ -49,6 +49,24 @@ final class FishAudioDrama3ConfigTests: XCTestCase {
         XCTAssertThrowsError(try FishAudioDrama3Config.parse(root))
     }
 
+    func testRejectsOversizeRotaryFactorsWithoutIntegerOverflow() throws {
+        for factor in [1.1, 1e20, Double(Float.greatestFiniteMagnitude)] {
+            var root = try fixture()
+            var text = try XCTUnwrap(root["text_config"] as? [String: Any])
+            var rope = try XCTUnwrap(text["rope_parameters"] as? [String: Any])
+            rope["partial_rotary_factor"] = factor
+            text["rope_parameters"] = rope
+            root["text_config"] = text
+            XCTAssertThrowsError(try FishAudioDrama3Config.parse(root), "Text factor: \(factor)")
+
+            root = try fixture()
+            var tower = try XCTUnwrap(root["audio_decoder_config"] as? [String: Any])
+            tower["rotary_percent"] = factor
+            root["audio_decoder_config"] = tower
+            XCTAssertThrowsError(try FishAudioDrama3Config.parse(root), "Tower factor: \(factor)")
+        }
+    }
+
     func testTowerQKNormConfigDefaultRemainsAccepted() throws {
         var root = try fixture(), a = try XCTUnwrap(root["audio_decoder_config"] as? [String: Any])
         a["attention_qk_norm"] = false; root["audio_decoder_config"] = a

@@ -149,7 +149,8 @@ A local bundle contains config/tokenizer metadata, `model*.safetensors`,
 index and `soniqo_manifest.json` with hashes, pinned source revision, and
 validation status. The runtime rejects duplicate, missing, unexpected, and
 incorrectly shaped language-model/tower parameters, and mismatched quantization
-maps. Raw FP8 weights must be converted before loading.
+maps. Invalid rotary dimensions are rejected before weight allocation.
+Raw FP8 weights must be converted before loading.
 
 Run heavy checks sequentially. Build the test binary and debug metallib first,
 following the package's test instructions. Lightweight tests:
