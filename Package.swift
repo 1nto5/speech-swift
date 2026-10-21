@@ -416,6 +416,8 @@ let package = Package(
             dependencies: [
                 "AudioCommon",
                 "MLXCommon",
+                "SpeechRuntime",
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
@@ -813,6 +815,7 @@ let package = Package(
         .target(
             name: "AudioCLILib",
             dependencies: [
+                "FishAudioTTS",
                 "PocketTTS",
                 "VoxtralTTS",
                 "SpeechRuntime",
@@ -1085,7 +1088,8 @@ let package = Package(
             dependencies: [
                 "FishAudioTTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
                 .product(name: "MLX", package: "mlx-swift")
-            ]
+            ],
+            resources: [.copy("Resources")]
         ),
         .testTarget(
             name: "F5TTSTests",
