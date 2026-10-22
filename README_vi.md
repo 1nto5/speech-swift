@@ -60,7 +60,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[IndexTTS2](docs/models/indextts2.md)** — Native MLX voice cloning from a reference voice (IndexTeam IndexTTS-2, 1.5B-class fp16 bundle, speaker/emotion/pause controls)
 - **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English + Mandarin; non-commercial license)
 - **[Higgs TTS 3](docs/models/higgs-tts.md)** — Conversational TTS with zero-shot voice cloning and inline emotion/style/SFX/prosody tags (Boson Higgs TTS 3, Qwen3-4B backbone, MLX bf16, 24 kHz, 100+ languages; research/non-commercial license)
-- **[Kokoro TTS](https://soniqo.audio/guides/kokoro)** — TTS trên thiết bị (82M, CoreML/Neural Engine, 54 giọng, sẵn sàng cho iOS, 10 ngôn ngữ)
+- **[Kokoro TTS](https://soniqo.audio/guides/kokoro)** — TTS trên thiết bị (82M, CoreML/Neural Engine, 54 giọng, sẵn sàng cho iOS, 10 ngôn ngữ + hai gói giọng tiếng Đức)
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS định dạng dài / nhiều người nói (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, tổng hợp podcast/sách nói lên đến 90 phút, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS đa ngôn ngữ (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB hoặc CoreML INT8 342 MB, 9 ngôn ngữ, 5 giọng nói có sẵn, streaming trên MLX)
 - **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — Tổng hợp giọng nói trực tuyến và nhân bản giọng không cần bản chép (CoreML, stereo 48 kHz, khối 80 ms, mô hình biên dịch 367,6 MB; macOS 15+ / iOS 18+)

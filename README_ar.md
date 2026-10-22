@@ -70,7 +70,7 @@
 - **[IndexTTS2](docs/models/indextts2.md)** — Native MLX voice cloning from a reference voice (IndexTeam IndexTTS-2, 1.5B-class fp16 bundle, speaker/emotion/pause controls)
 - **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English + Mandarin; non-commercial license)
 - **[Higgs TTS 3](docs/models/higgs-tts.md)** — Conversational TTS with zero-shot voice cloning and inline emotion/style/SFX/prosody tags (Boson Higgs TTS 3, Qwen3-4B backbone, MLX bf16, 24 kHz, 100+ languages; research/non-commercial license)
-- **[Kokoro TTS](https://soniqo.audio/ar/guides/kokoro)** — تحويل النص إلى كلام على الجهاز (82M، CoreML/Neural Engine، 54 صوتاً، جاهز لـ iOS، 10 لغات)
+- **[Kokoro TTS](https://soniqo.audio/ar/guides/kokoro)** — تحويل النص إلى كلام على الجهاز (82M، CoreML/Neural Engine، 54 صوتاً، جاهز لـ iOS، 10 لغات + حزمتا صوت ألمانيتان)
 - **[VibeVoice TTS](https://soniqo.audio/ar/guides/vibevoice)** — تحويل النص إلى كلام للنصوص الطويلة / متعدد المتحدثين (Microsoft VibeVoice Realtime-0.5B + 1.5B، MLX، توليد بودكاست/كتب صوتية حتى 90 دقيقة، EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ar/guides/magpie)** — تحويل النص إلى كلام متعدد اللغات (NVIDIA Magpie-TTS Multilingual 357M، MLX INT8 411 ميغابايت أو CoreML INT8 342 ميغابايت، 9 لغات، 5 متحدثين جاهزين، تدفق على MLX)
 - **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — توليد كلام متدفق واستنساخ الصوت دون نص مرجعي (CoreML، ستيريو 48 kHz، مقاطع 80 ms، نماذج مجمعة بحجم 367.6 MB؛ macOS 15+ / iOS 18+)

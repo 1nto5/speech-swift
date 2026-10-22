@@ -1903,6 +1903,7 @@ func mapToKokoroLanguageCode(_ language: String) -> String {
     case "pt", "portuguese": return "pt"
     case "it", "italian": return "it"
     case "hi", "hindi": return "hi"
+    case "de", "deu", "german": return "de"
     default: return "en"
     }
 }
