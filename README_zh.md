@@ -60,7 +60,7 @@
 - **[IndexTTS2](docs/models/indextts2.md)** — Native MLX voice cloning from a reference voice (IndexTeam IndexTTS-2, 1.5B-class fp16 bundle, speaker/emotion/pause controls)
 - **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English + Mandarin; non-commercial license)
 - **[Higgs TTS 3](docs/models/higgs-tts.md)** — Conversational TTS with zero-shot voice cloning and inline emotion/style/SFX/prosody tags (Boson Higgs TTS 3, Qwen3-4B backbone, MLX bf16, 24 kHz, 100+ languages; research/non-commercial license)
-- **[Kokoro TTS](https://soniqo.audio/zh/guides/kokoro)** — 端侧 TTS（82M，CoreML/神经引擎，54 种音色，iOS 就绪，10 种语言）
+- **[Kokoro TTS](https://soniqo.audio/zh/guides/kokoro)** — 端侧 TTS（82M，CoreML/神经引擎，54 种音色，iOS 就绪，10 种语言 + 两个德语音色包）
 - **[VibeVoice TTS](https://soniqo.audio/zh/guides/vibevoice)** — 长篇 / 多说话人 TTS（Microsoft VibeVoice Realtime-0.5B + 1.5B，MLX，可合成最长 90 分钟的播客 / 有声书，英语 / 中文）
 - **[Magpie TTS](https://soniqo.audio/zh/guides/magpie)** — 多语言 TTS（NVIDIA Magpie-TTS Multilingual 357M，MLX INT8 411 MB 或 CoreML INT8 342 MB，9 种语言，5 位预设说话人，MLX 端流式）
 - **[MOSS-TTS-Nano](https://soniqo.audio/guides/moss-tts-nano)** — 流式语音合成与免转录语音克隆（CoreML、48 kHz 立体声、80 ms 分块、367.6 MB 编译模型；macOS 15+ / iOS 18+）
