@@ -44,7 +44,8 @@ final class E2EKokoroGermanTests: XCTestCase {
         let audio = try m.synthesize(text: inputText, voice: "dm_martin", language: "de")
         XCTAssertGreaterThan(audio.count, 24000, "Should produce more than a second of audio")
         let duration = Double(audio.count) / 24000.0
-        XCTAssertLessThan(duration, 5.1)
+        // Two sentences may render as two chunks; only rule out runaway output.
+        XCTAssertLessThan(duration, 12.0)
         let rms = sqrt(audio.map { $0 * $0 }.reduce(0, +) / Float(audio.count))
         XCTAssertGreaterThan(rms, 0.001, "Audio should not be silence")
 

@@ -47,21 +47,56 @@ public final class KokoroTTSModel {
 
     // MARK: - Synthesis
 
+    /// Input slots of the end-to-end graph (`input_ids` is `[1, 128]`).
+    static let inputSlots = 128
+    /// Token budget per chunk, as in speech-core's full-capacity Kokoro
+    /// profile: at speed 1 a chunk this size stays inside the 5 s graph.
+    static let chunkTokenBudget = 72
+    /// A last chunk shorter than this merges into the previous one when the
+    /// input allows it; very short utterances render unreliably.
+    static let minTailTokens = 12
+    /// Pieces of an overflow retry never go below this many tokens.
+    static let minRetryTokens = 6
+    /// How many times one chunk may be split again after an overflow.
+    static let maxRetryDepth = 4
+    /// The last 200 ms of the bounded graph's output window are not trusted,
+    /// as in speech-core: speech reaching into them means the chunk was too
+    /// long and is split and rendered again.
+    static let outputTailGuardSamples = 4800
+
     /// Synthesize speech from text.
+    ///
+    /// Text longer than one pass of the fixed-capacity graph is split into
+    /// sentence-sized chunks (then clauses, then words), rendered one by one
+    /// and concatenated. A chunk whose speech would overrun the graph's
+    /// output window is split again and rendered as two pieces.
     public func synthesize(
         text: String,
         voice: String = "af_heart",
         language: String = "en",
         speed: Float = 1.0
     ) throws -> [Float] {
+        var audio: [Float] = []
+        try synthesizeChunks(text: text, voice: voice, language: language, speed: speed) { samples, _ in
+            audio.append(contentsOf: samples)
+        }
+        return audio
+    }
+
+    /// Renders `text` chunk by chunk and hands each piece's audio to
+    /// `onChunk` as soon as it is ready. Exactly one call, the last, has
+    /// `isFinal` set; text with nothing to speak yields one empty final piece.
+    func synthesizeChunks(
+        text: String,
+        voice: String,
+        language: String,
+        speed: Float,
+        onChunk: ([Float], Bool) throws -> Void
+    ) throws {
         guard _isLoaded, let network else {
             throw AudioModelError.inferenceFailed(
                 operation: "kokoro-synthesize", reason: "Model not loaded")
         }
-
-        let tokenIds = phonemizer.tokenize(text, maxLength: config.maxPhonemeLength, language: language)
-        let tokenCount = min(tokenIds.count, 128)
-
         guard let styleVector = voiceEmbeddings[voice] else {
             let available = Array(voiceEmbeddings.keys).sorted().prefix(5)
             throw AudioModelError.voiceNotFound(
@@ -69,7 +104,88 @@ public final class KokoroTTSModel {
                 searchPath: "Available: \(available.joined(separator: ", "))...")
         }
 
-        let padTo = 128
+        // Packing measures many overlapping candidates; phonemize each once.
+        var tokenCounts: [String: Int] = [:]
+        let countTokens: (String) -> Int = { piece in
+            if let count = tokenCounts[piece] { return count }
+            let count = self.phonemizer.tokenize(piece, maxLength: .max, language: language).count
+            tokenCounts[piece] = count
+            return count
+        }
+        let chunks = KokoroTextChunker.chunk(
+            text, countTokens: countTokens, maxTokens: Self.chunkTokenBudget,
+            hardCapTokens: min(config.maxPhonemeLength, Self.inputSlots),
+            minTailTokens: Self.minTailTokens)
+
+        guard !chunks.isEmpty else {
+            try onChunk([], true)
+            return
+        }
+        var emitted = false
+        for (index, chunk) in chunks.enumerated() {
+            // An overflow retry can turn one chunk into several pieces; they
+            // come back together, so the final piece is known when emitted.
+            let pieces = try renderChunk(
+                chunk, network: network, style: styleVector, speed: speed,
+                language: language, countTokens: countTokens, depth: 0)
+            for (pieceIndex, var piece) in pieces.enumerated() {
+                // A short fade-in keeps the seam between pieces click-free.
+                if emitted { fadeIn(&piece) }
+                let isFinal = index == chunks.count - 1 && pieceIndex == pieces.count - 1
+                try onChunk(piece, isFinal)
+                emitted = true
+            }
+        }
+    }
+
+    /// Renders one chunk, splitting it again while its speech would overrun
+    /// the graph's output window.
+    private func renderChunk(
+        _ text: String,
+        network: KokoroNetwork,
+        style: [Float],
+        speed: Float,
+        language: String,
+        countTokens: (String) -> Int,
+        depth: Int
+    ) throws -> [[Float]] {
+        let tokenIds = phonemizer.tokenize(text, maxLength: .max, language: language)
+        let capacity = min(config.maxPhonemeLength, Self.inputSlots)
+        var unsplit: [Float]?
+        if tokenIds.count <= capacity {
+            let pass = try runModel(tokenIds: tokenIds, network: network, style: style, speed: speed)
+            if !pass.overran { return [pass.audio] }
+            unsplit = pass.audio
+        }
+        if depth < Self.maxRetryDepth, tokenIds.count > Self.minRetryTokens * 2 {
+            let pieces = KokoroTextChunker.splitForRetry(
+                text, countTokens: countTokens,
+                minTokens: Self.minRetryTokens, maxTokens: tokenIds.count - 1)
+            if pieces.count == 2 {
+                AudioLog.inference.info("Kokoro: splitting a \(tokenIds.count)-token chunk that overran the output window")
+                return try pieces.flatMap {
+                    try renderChunk(
+                        $0, network: network, style: style, speed: speed,
+                        language: language, countTokens: countTokens, depth: depth + 1)
+                }
+            }
+        }
+        // No safe split exists: keep what one bounded pass produces.
+        if let unsplit { return [unsplit] }
+        let clipped = Array(tokenIds.prefix(capacity - 1)) + [phonemizer.eosId]
+        return [try runModel(tokenIds: clipped, network: network, style: style, speed: speed).audio]
+    }
+
+    /// One pass of the end-to-end graph. `overran` is set when the predicted
+    /// speech reaches the untrusted tail of the output window.
+    private func runModel(
+        tokenIds: [Int],
+        network: KokoroNetwork,
+        style styleVector: [Float],
+        speed: Float
+    ) throws -> (audio: [Float], overran: Bool) {
+        let padTo = Self.inputSlots
+        let tokenCount = min(tokenIds.count, padTo)
         let paddedIds = phonemizer.pad(Array(tokenIds.prefix(padTo)), to: padTo)
 
         let inputIds = try createInt32Array(shape: [1, padTo], values: paddedIds.map { Int32($0) })
@@ -81,8 +197,11 @@ public final class KokoroTTSModel {
         let result = try network.predictE2E(inputIds: inputIds, attentionMask: maskArray, refS: refS, speed: speedArray)
         let elapsed = CFAbsoluteTimeGetCurrent() - t0
 
-        let validSamples = min(result.audioLengthSamples, result.audio.count)
-        guard validSamples > 0 else { return [] }
+        let outputCapacity = result.audio.count
+        let overran = outputCapacity > Self.outputTailGuardSamples
+            && result.audioLengthSamples > outputCapacity - Self.outputTailGuardSamples
+        let validSamples = min(result.audioLengthSamples, outputCapacity)
+        guard validSamples > 0 else { return ([], overran) }
 
         var audio = [Float](repeating: 0, count: validSamples)
         if result.audio.dataType == .float16 {
@@ -136,7 +255,14 @@ public final class KokoroTTSModel {
         let duration = Double(validSamples) / Double(config.sampleRate)
         let elapsedMs = elapsed * 1000
         AudioLog.inference.info("Kokoro E2E: \(tokenCount) tokens → \(validSamples) samples (\(String(format: "%.1f", duration))s) in \(String(format: "%.0f", elapsedMs))ms")
-        return audio
+        return (audio, overran)
+    }
+
+    /// 5 ms linear fade-in at the start of a piece that follows another.
+    private func fadeIn(_ audio: inout [Float]) {
+        let count = min(audio.count, config.sampleRate / 200)
+        guard count >= 2 else { return }
+        for i in 0..<count { audio[i] *= Float(i) / Float(count) }
     }
 
     /// List available voice presets.
