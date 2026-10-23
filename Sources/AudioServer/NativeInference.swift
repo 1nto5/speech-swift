@@ -280,7 +280,7 @@ public final class NativeInferenceService: @unchecked Sendable {
             let cancel = try JSONDecoder().decode(Cancel.self, from: Data(body.readableBytesView))
             return jsonResponse(["cancelled": self.cancellations.cancel(cancel.requestID)])
         }
-        router.post("/v1/inference") { request, _ in
+        router.post("/v1/inference") { request, context in
             let body = try await request.body.collect(upTo: 16 * 1024 * 1024)
             let input: NativeInferenceRequest
             do { input = try JSONDecoder().decode(NativeInferenceRequest.self, from: Data(body.readableBytesView)) }
@@ -313,8 +313,17 @@ public final class NativeInferenceService: @unchecked Sendable {
                 return Response(status: .ok, headers: [.contentType: "application/x-ndjson"], body: .init(asyncSequence: stream))
             }
             defer { self.cancellations.remove(input.requestID) }
-            let data = try await self.perform(input, token: token)
-            return Response(status: .ok, headers: [.contentType: "application/json"], body: .init(byteBuffer: .init(data: data)))
+            do {
+                let data = try await self.perform(input, token: token)
+                return Response(status: .ok, headers: [.contentType: "application/json"], body: .init(byteBuffer: .init(data: data)))
+            } catch {
+                context.logger.error("Native inference failed", metadata: [
+                    "requestID": .string(input.requestID),
+                    "operation": .string(input.operation.rawValue),
+                    "error": .string(String(describing: error)),
+                ])
+                throw error
+            }
         }
     }
 }

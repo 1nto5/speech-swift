@@ -5,6 +5,10 @@ network parameters, full Whisper Large-v3 CoreML, and CoreML Silero VAD into one
 process. All model assets must already exist locally. Startup rejects incompatible
 checkpoints and performs no downloads or model substitution.
 
+Failed non-streaming inference requests log the request ID, operation, and
+underlying error in the server process. HTTP failures remain errors; inspect
+the local server log when a framework-generated HTTP 500 has an empty body.
+
 An optional `agentDirectory` loads a staged Gemma 4 12B Unified INT4 text model
 alongside E4B. The 12B checkpoint must use affine quantization with group size 64.
 Select `model: "gemma4-12b-it"` for chat requests; E4B remains available as
