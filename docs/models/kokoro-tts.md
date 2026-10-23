@@ -115,6 +115,15 @@ Fixed-shape decoder models for different maximum output lengths:
 
 Each frame produces 600 audio samples at 24 kHz (25ms per frame).
 
+## Long text
+
+The end-to-end graph takes 128 phoneme tokens and renders at most 5 s per pass. Text that fits one pass renders in a single call, unchanged. Longer text is split the way speech-core splits it on Android:
+
+- Chunks are packed greedily up to 72 tokens, preferring sentence ends, then clause punctuation (`,` `;` `:`), then words, then characters for a single oversized word. Punctuation is a boundary only when whitespace or the end of the text follows it, so `3.5`, `1.000`, `z.B.` and `18:30` reach the phonemizer intact.
+- A last chunk under 12 tokens joins the previous one when the 128-token input allows it.
+- A chunk whose speech would reach the last 200 ms of the output window is split at its best sentence, clause or word boundary and rendered again, up to four times.
+- `synthesize` returns the chunks' audio concatenated. `generateStream` yields each chunk as soon as it is rendered, with `frameIndex` set to the chunk's first sample in the stream.
+
 ## Phonemizer
 
 Three-tier pipeline, all Apache-2.0 licensed (no GPL dependencies):
@@ -230,6 +239,7 @@ Sources/KokoroTTS/
   Configuration.swift        Model config, voice/language selection
   KokoroModel.swift          End-to-end CoreML model loading and inference
   KokoroTTS.swift            High-level API (fromPretrained, synthesize, alignment)
+  TextChunker.swift          Sentence/clause/word chunking of long text (mirrors speech-core)
   Phonemizer.swift           English G2P + multilingual routing (en/zh/ja/hi/fr/es/pt/it/de)
   GermanPhonemizer.swift     German: normalization + dict_de.json + inflection/compounds + rule-based G2P
   ChinesePhonemizer.swift    Chinese: CFStringTransform pinyin → IPA
