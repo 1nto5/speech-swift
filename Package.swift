@@ -824,6 +824,9 @@ let package = Package(
         .target(
             name: "AudioServer",
             dependencies: [
+                "Qwen3Chat",
+                "WhisperASR",
+                .product(name: "MLX", package: "mlx-swift"),
                 "Qwen3ASR",
                 "Qwen3TTS",
                 "Qwen3TTSCoreML",

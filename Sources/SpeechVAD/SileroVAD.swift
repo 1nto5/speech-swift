@@ -106,6 +106,11 @@ public final class SileroVADModel {
     /// - Parameter samples: exactly 512 PCM Float32 samples at 16kHz
     /// - Returns: speech probability in `[0, 1]`
     public func processChunk(_ samples: [Float]) -> Float {
+        (try? processChunkThrowing(samples)) ?? 0
+    }
+
+    /// Streaming inference that propagates model errors to the caller.
+    public func processChunkThrowing(_ samples: [Float]) throws -> Float {
         precondition(samples.count == Self.chunkSize,
                      "Chunk must be \(Self.chunkSize) samples, got \(samples.count)")
 
@@ -120,7 +125,20 @@ public final class SileroVADModel {
             return processChunkMLX(fullSamples)
         case .coreml:
             #if canImport(CoreML)
-            return (try? processChunkCoreML(fullSamples)) ?? 0.0
+            return try processChunkCoreML(fullSamples)
+            #else
+            fatalError("CoreML not available on this platform")
+            #endif
+        }
+    }
+
+    /// Share immutable model weights while keeping each stream's state separate.
+    public func makeIndependentStream() -> SileroVADModel {
+        switch engine {
+        case .mlx: return SileroVADModel(network: network!)
+        case .coreml:
+            #if canImport(CoreML)
+            return SileroVADModel(coremlModel: coremlModel!)
             #else
             fatalError("CoreML not available on this platform")
             #endif

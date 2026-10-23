@@ -100,6 +100,28 @@ let audio = try await model.generateVoxCPM2(
 )
 ```
 
+## Explicit FP16 loading and incremental audio
+
+`fromPretrained(weightPrecision: .float16)` requires an unquantized checkpoint
+and stores the main network parameters in Float16. AudioVAE parameters and
+decoding remain Float32, and diffusion arithmetic can promote to Float32.
+The `.automatic` default preserves the existing loading policy.
+
+`generateVoxCPM2` accepts an optional `InferenceCancellationToken`, a `seed`,
+`streamingChunkPatches` (default 4), and `onAudioChunk`. The callback receives
+new 48 kHz Float32 samples from causal-prefix decoding, including the final
+tail. Decoding retains bounded left context derived from the AudioVAE's causal
+receptive field. A separate decoder random state preserves diffusion sampling across
+buffered and incremental generation. Cancellation is checked between patches.
+Calls on one model instance must be serialized.
+
+`fromPretrained(tokenizerDirectory: ...)` uses an explicitly staged compatible
+tokenizer, rejects an incomplete snapshot, and leaves its files unchanged.
+Omitting it preserves the existing shared tokenizer cache behavior.
+
+The [native inference service](native-inference-server.md) exposes this mode
+with streamed PCM16 output, cancellation, and actual parameter dtype counts.
+
 ## Implementation Checklist
 
 - Model config comes from `config.json` in the HF snapshot
