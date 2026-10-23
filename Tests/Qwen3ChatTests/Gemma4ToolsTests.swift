@@ -2,6 +2,13 @@ import XCTest
 @testable import Qwen3Chat
 
 final class Gemma4ToolsTests: XCTestCase {
+    func testOrphanToolCallTerminatorIsRejectedBeforeSpeech() throws {
+        for raw in ["}<tool_call|>", "}<tool_call|>}<tool_call|>",
+                    "<|tool_call>call:lookup{}<tool_call|>}<tool_call|>"] {
+            XCTAssertThrowsError(try Gemma4ToolCodec.response(raw))
+        }
+    }
+
     func testChannelCloserAfterToolResultIsRemovedFromContentOnly() throws {
         let reply = try Gemma4ToolCodec.response("<channel|>I have found your reservation.<turn|>")
         XCTAssertEqual(reply.content, "I have found your reservation.")

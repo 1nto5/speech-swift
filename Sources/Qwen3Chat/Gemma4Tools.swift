@@ -232,6 +232,9 @@ public enum Gemma4ToolCodec {
             calls.append(.init(name: name, arguments: arguments))
             text.removeSubrange(start.lowerBound..<end.upperBound)
         }
+        guard !text.contains("<tool_call|>") else {
+            throw Gemma4ToolError.malformed("orphan tool call terminator")
+        }
         for marker in ["<eos>", "<turn|>", "<channel|>", "<|tool_response>", "<|think|>"] {
             text = text.replacingOccurrences(of: marker, with: "")
         }
