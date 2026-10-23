@@ -8,7 +8,7 @@ Kokoro-82M is a non-autoregressive text-to-speech model based on [StyleTTS 2](ht
 - **Backend**: CoreML (Neural Engine)
 - **Output**: 24 kHz mono Float32 PCM
 - **Inference**: Non-autoregressive, end-to-end model
-- **Voices**: 54 presets across 10 languages
+- **Voices**: 54 presets across 10 languages, plus two German voice bundles (see [German voices](#german-voices))
 - **License**: Apache-2.0
 
 ## Pipeline
@@ -123,6 +123,19 @@ Three-tier pipeline, all Apache-2.0 licensed (no GPL dependencies):
 2. **Suffix stemming** — Morphological decomposition for known suffixes
 3. **BART G2P** — Neural grapheme-to-phoneme fallback using a separate CoreML encoder-decoder model for OOV words
 
+### Custom pronunciations
+
+Proper nouns outside the shipped dictionaries reach the BART G2P fallback, which guesses from *English* spelling rules and mangles non-Anglo names. `addPronunciations` injects `word -> IPA` entries ahead of tier 1:
+
+```swift
+let tts = try await KokoroTTSModel.fromPretrained()
+tts.addPronunciations(["tatiana": "tɑtiˈɑnə"])
+```
+
+Keys are matched lowercased and must be single words — text is split on whitespace and punctuation before resolution, so a key containing a space, hyphen, or apostrophe is never looked up. IPA must use symbols from the model vocabulary; anything else is silently dropped at tokenization. Call `addPronunciations` after the dictionaries are loaded — `loadDictionaries` replaces the gold dictionary wholesale.
+
+Entries apply to the English path only: the `language` argument selects a dedicated phonemizer for Chinese, Japanese, Italian, French, Spanish, Portuguese, and Hindi, and none of those consult the gold dictionary. The lookup is unlocked, so register entries before synthesis starts running concurrently on the same model.
+
 ## Voice Embeddings
 
 Each voice is a 256-dimensional Float32 vector stored in a per-voice JSON file. The embedding captures speaker identity and style characteristics. The first 128 dimensions are used by the decoder, the second 128 by the prosody model.
@@ -146,6 +159,37 @@ Naming convention: `[language][gender]_[name]`
 | **Total (1 decoder)** | **~170 MB** | |
 
 Weights: [aufklarer/Kokoro-82M-CoreML](https://huggingface.co/aufklarer/Kokoro-82M-CoreML)
+
+## German voices
+
+German is not one of the multilingual bundle's languages: the German voices are
+separate Kokoro-architecture checkpoints fine-tuned by
+[kikiri-tts](https://huggingface.co/kikiri-tts) (StyleTTS2 stage 2, Apache 2.0),
+one voice per weight set, converted with the same end-to-end pipeline:
+
+| Model ID | Voice | Files |
+|---|---|---|
+| `aufklarer/Kokoro-82M-German-Martin-CoreML` | `dm_martin` (male) | `kokoro_5s.mlmodelc`, `vocab_index.json`, `dict_de.json`, `voices/dm_martin.json` |
+| `aufklarer/Kokoro-82M-German-Victoria-CoreML` | `df_victoria` (female) | same layout, `voices/df_victoria.json` |
+
+```swift
+let tts = try await KokoroTTSModel.fromPretrained(modelId: KokoroTTSModel.germanMartinModelId)
+let audio = try tts.synthesize(text: "Am 3. Oktober um 18:30 Uhr kostet es 12,80 €.",
+                               voice: "dm_martin", language: "de")
+```
+
+`GermanPhonemizer.swift` reproduces the front-end the voices were trained
+with (espeak-ng 1.52 German as post-processed by misaki, short ü written `y`,
+`ʦ`/`ʧ`/`ʤ` affricates, `I`/`W` diphthongs) without espeak: it spells out
+numbers, ordinals, dates, times, currency, units and abbreviations, resolves
+words through `dict_de.json` (the 50k most frequent German words plus the
+brand/tech overrides of the kikiri front-end, downloaded with the bundle),
+derives inflected and compound forms from dictionary words, and falls back to
+rule-based G2P. The structure is shared with speech-core's `kokoro_german.cpp`;
+`GermanPhonemizerTests` keeps the two in lockstep and can run a full parity
+check against the C++ output (`KOKORO_GERMAN_PARITY_TSV`). Passing `"de"` to
+the multilingual bundle still works (German phonemes through an English voice);
+a German bundle has exactly one voice.
 
 ## Performance (M2 Max)
 
@@ -186,7 +230,8 @@ Sources/KokoroTTS/
   Configuration.swift        Model config, voice/language selection
   KokoroModel.swift          End-to-end CoreML model loading and inference
   KokoroTTS.swift            High-level API (fromPretrained, synthesize, alignment)
-  Phonemizer.swift           English G2P + multilingual routing (en/zh/ja/hi/fr/es/pt/it)
+  Phonemizer.swift           English G2P + multilingual routing (en/zh/ja/hi/fr/es/pt/it/de)
+  GermanPhonemizer.swift     German: normalization + dict_de.json + inflection/compounds + rule-based G2P
   ChinesePhonemizer.swift    Chinese: CFStringTransform pinyin → IPA
   JapanesePhonemizer.swift   Japanese: CFStringTokenizer → katakana → IPA (M2P table)
   HindiPhonemizer.swift      Hindi: Apple IAST transliteration → IPA

@@ -7,6 +7,10 @@ import AudioCommon
 /// Lightweight (82M params) non-autoregressive TTS model.
 /// Supports 10 languages with 54 preset voices. Designed for iOS/iPad deployment.
 ///
+/// German is served by separate single-voice bundles (the kikiri-tts
+/// fine-tunes): load one with `fromPretrained(modelId: "aufklarer/Kokoro-82M-German-Martin-CoreML")`
+/// (or `…-Victoria-CoreML`) and synthesize with `language: "de"`.
+///
 /// Uses an end-to-end CoreML model (`kokoro_5s.mlmodelc`) that runs the full
 /// pipeline (BERT → duration → alignment → prosody → decoder) in one call.
 ///
@@ -18,6 +22,10 @@ public final class KokoroTTSModel {
 
     /// Default HuggingFace model ID.
     public static let defaultModelId = "aufklarer/Kokoro-82M-CoreML"
+    /// German voice bundles: one Kokoro checkpoint per voice, each with its
+    /// single `dm_martin` / `df_victoria` preset and `dict_de.json`.
+    public static let germanMartinModelId = "aufklarer/Kokoro-82M-German-Martin-CoreML"
+    public static let germanVictoriaModelId = "aufklarer/Kokoro-82M-German-Victoria-CoreML"
     /// Default voice preset.
     public static let defaultVoice = "af_heart"
     /// Output sample rate.
@@ -136,6 +144,24 @@ public final class KokoroTTSModel {
         Array(voiceEmbeddings.keys).sorted()
     }
 
+    /// Registers custom `word -> IPA` pronunciations for proper nouns missing from
+    /// the shipped dictionaries. Resolved ahead of the bundled dictionaries, suffix
+    /// stemming, and the neural G2P fallback.
+    ///
+    /// Keys are matched lowercased and must be single words — a key containing a
+    /// space, hyphen, or apostrophe is never looked up, because text is split on
+    /// punctuation before resolution. The IPA must use symbols from the model
+    /// vocabulary; anything else is dropped at tokenization.
+    ///
+    /// Entries apply to English only. Passing `language:` zh, ja, it, fr, es, pt,
+    /// or hi to `synthesize` selects a phonemizer that never sees them.
+    ///
+    /// The lookup is unlocked, so register entries before `synthesize` starts
+    /// running concurrently on this instance.
+    public func addPronunciations(_ entries: [String: String]) {
+        phonemizer.addPronunciations(entries)
+    }
+
     // MARK: - Helpers
 
     private func createInt32Array(shape: [Int], values: [Int32]) throws -> MLMultiArray {
@@ -156,7 +182,8 @@ public final class KokoroTTSModel {
 
     /// Warm up CoreML model by running a dummy inference.
     public func warmUp() throws {
-        _ = try? synthesize(text: "hello", voice: availableVoices.first ?? "af_heart")
+        let voice = voiceEmbeddings[Self.defaultVoice] != nil ? Self.defaultVoice : (availableVoices.first ?? Self.defaultVoice)
+        _ = try? synthesize(text: "hello", voice: voice)
     }
 
     // MARK: - Model Loading
@@ -192,6 +219,7 @@ public final class KokoroTTSModel {
                 "g2p_vocab.json",
                 "us_gold.json",
                 "us_silver.json",
+                "dict_de.json",
                 "voices/*.json",
             ],
             offlineMode: offlineMode
@@ -207,6 +235,7 @@ public final class KokoroTTSModel {
         }
         let phonemizer = try KokoroPhonemizer.loadVocab(from: vocabURL)
         try phonemizer.loadDictionaries(from: cacheDir)
+        try phonemizer.loadGermanDictionary(from: cacheDir)
 
         // Load G2P models
         progressHandler?(0.76, "Loading G2P models...")
