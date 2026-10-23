@@ -709,6 +709,25 @@ Modules may also define their own error types for domain-specific failures:
 - `CosyVoiceTTSError` (CosyVoiceTTS) — load, download, input, generation errors
 - `DownloadError` (AudioCommon) — HuggingFace download failures
 
+## Native chat, streaming state, and cancellation
+
+`Gemma4ConversationMessage` carries complete role and tool-result history.
+`Gemma4Tool` describes a JSON-schema function; `Gemma4ToolCall` carries an ID,
+name, and structured arguments. `Gemma4Chat.generateResponse` returns text and
+parsed calls, uses bounded prefill, and releases request KV state on exit.
+
+`InferenceCancellationToken` is a thread-safe cooperative cancellation token
+shared by Gemma generation and VoxCPM2 audio generation. Call `cancel()` from
+the requesting thread; `checkCancellation()` throws `CancellationError` after
+cancellation is observed.
+
+`SileroVADModel.makeIndependentStream()` shares immutable weights and creates
+independent LSTM/context state. `processChunkThrowing` propagates inference
+errors; the existing non-throwing `processChunk` keeps its prior behavior.
+
+See [native inference service](inference/native-inference-server.md) for HTTP
+request fields, model identities, streaming, precision, and scheduling.
+
 ## Logging
 
 Centralized structured logging via `os.Logger` (Apple's unified logging system):

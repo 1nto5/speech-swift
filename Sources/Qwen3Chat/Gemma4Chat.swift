@@ -92,6 +92,32 @@ public final class Gemma4Chat: @unchecked Sendable {
 
     public func resetState() { state = .initial(config: denseConfig) }
 
+    /// Generate text or native tool calls from complete, isolated role history.
+    /// Calls on one model instance must be serialized by its owner.
+    public func generateResponse(
+        messages: [Gemma4ConversationMessage],
+        tools: [Gemma4Tool] = [],
+        sampling: ChatSamplingConfig = .default,
+        cancellation: InferenceCancellationToken? = nil
+    ) throws -> Gemma4Response {
+        try cancellation?.checkCancellation()
+        defer { resetState() }
+        let prompt = try Gemma4ToolCodec.prompt(messages: messages, tools: tools)
+        let tokens = gemmaTokenizer.encode(prompt)
+        guard tokens.count + sampling.maxTokens <= denseConfig.maxPositionEmbeddings else {
+            throw Gemma4ToolError.malformed("conversation exceeds the model context")
+        }
+        var generated: [Int] = []
+        decode(promptTokens: tokens, sampling: sampling,
+               prefillChunkSize: 256,
+               shouldContinue: { cancellation?.isCancelled != true && !Task.isCancelled },
+               onToken: { generated.append($0) }, onText: { _ in })
+        try cancellation?.checkCancellation()
+        try Task.checkCancellation()
+        return try Gemma4ToolCodec.response(
+            gemmaTokenizer.decodeWithSpecialTokens(generated), generatedTokens: generated.count)
+    }
+
     // MARK: - Generation
 
     /// Buffered (non-streaming) generation — returns the full thinking-free reply.
@@ -219,6 +245,7 @@ public final class Gemma4Chat: @unchecked Sendable {
         promptTokens: [Int],
         reusablePrefix: Int = 0,
         sampling: ChatSamplingConfig,
+        prefillChunkSize: Int? = nil,
         shouldContinue: () -> Bool = { true },
         constraint: (any TokenDecodeConstraint)? = nil,
         onToken: (Int) -> Void = { _ in },
@@ -226,7 +253,26 @@ public final class Gemma4Chat: @unchecked Sendable {
     ) -> ChatResponseFormatError? {
         // Prefill. Only the final position is sampled, so the lm_head runs on that row alone —
         // over a long prompt the discarded rows are gigabytes of 262k-wide logits.
-        var logits = prefill(promptTokens, reusablePrefix: reusablePrefix)
+        guard shouldContinue() else { return nil }
+        var logits: MLXArray
+        if let prefillChunkSize {
+            resetState()
+            let chunkSize = max(1, prefillChunkSize)
+            var chunkLogits: MLXArray?
+            for offset in stride(from: 0, to: promptTokens.count, by: chunkSize) {
+                guard shouldContinue() else { return nil }
+                let end = min(offset + chunkSize, promptTokens.count)
+                let input = MLXArray(promptTokens[offset..<end].map { Int32($0) })
+                    .expandedDimensions(axis: 0)
+                let value = model.lastTokenLogits(inputIds: input, state: &state)
+                eval(value)
+                chunkLogits = value
+            }
+            guard let chunkLogits else { return nil }
+            logits = chunkLogits
+        } else {
+            logits = prefill(promptTokens, reusablePrefix: reusablePrefix)
+        }
 
         var history = promptTokens
         var produced = false

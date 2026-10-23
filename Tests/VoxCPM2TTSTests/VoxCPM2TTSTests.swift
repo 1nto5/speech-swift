@@ -46,6 +46,26 @@ final class StubVoxCPM2Tokenizer: Tokenizer {
 }
 
 final class VoxCPM2TTSConfigTests: XCTestCase {
+    func testExplicitTokenizerRequiresCompleteLocalSnapshot() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        do {
+            _ = try await VoxCPM2TTSModel.fromPretrained(
+                cacheDir: directory, tokenizerDirectory: directory, offlineMode: true)
+            XCTFail("An explicit missing tokenizer must fail before model loading")
+        } catch {
+            XCTAssertEqual((error as NSError).domain, "VoxCPM2TTSModel")
+            XCTAssertEqual((error as NSError).code, 7)
+        }
+    }
+
+    func testFP16RequiresUnquantizedCheckpoint() throws {
+        XCTAssertThrowsError(try VoxCPM2WeightPrecision.float16.validate(quantized: true))
+        XCTAssertNoThrow(try VoxCPM2WeightPrecision.float16.validate(quantized: false))
+        XCTAssertNoThrow(try VoxCPM2WeightPrecision.automatic.validate(quantized: true))
+    }
+
     func testModelArgsRoundTripAndLoad() throws {
         var args = ModelArgs()
         args.lmConfig.hiddenSize = 1536
@@ -400,6 +420,27 @@ final class VoxCPM2TTSQuantizationTests: XCTestCase {
 import AudioCommon
 import MLX
 @testable import VoxCPM2TTS
+
+final class E2EVoxCPM2DecoderContextTests: XCTestCase {
+    func testDecoderContextPreservesTheRetainedAudio() {
+        var config = AudioVAEConfig()
+        config.latentDim = 4
+        config.decoderDim = 16
+        config.decoderRates = [2, 2]
+        config.useNoiseBlock = false
+        let vae = AudioVAE(config)
+        MLX.seed(42)
+        let features = MLXArray((0..<640).map { sin(Float($0) * 0.03) }).reshaped([1, 160, 4])
+        let full = vae.decode(features).flattened()
+        let firstNeeded = 120
+        let start = firstNeeded - vae.decoderLeftContextFrames
+        let window = vae.decode(features[0..., start..., 0...]).flattened()
+        let expected = full[(firstNeeded * vae.decodeChunkSize)...]
+        let actual = window[((firstNeeded - start) * vae.decodeChunkSize)...]
+        XCTAssertEqual(actual.size, expected.size)
+        XCTAssertLessThan(abs(actual - expected).max().item(Float.self), 0.0001)
+    }
+}
 
 final class E2EVoxCPM2TTSTests: XCTestCase {
 

@@ -1,7 +1,7 @@
 import AudioCommon
 import Foundation
 
-/// Whisper large-v3 turbo ASR through speech-swift's native CoreML runtime.
+/// Whisper Large-v3 and Large-v3 Turbo ASR through the native CoreML runtime.
 public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable {
     public static let defaultModelId = "aufklarer/Whisper-Large-v3-Turbo-CoreML"
     public static let defaultModelVariant = "large-v3-v20240930_turbo"
@@ -113,9 +113,18 @@ public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable 
         }
     }
 
-    static func hasCompleteCachedBundle(in directory: URL) -> Bool {
+    /// Load a staged CoreML bundle without downloading or substituting a model.
+    public static func fromDirectory(_ directory: URL, modelId: String) throws -> WhisperASRModel {
+        guard hasCompleteCachedBundle(in: directory, requiresPrefill: false) else {
+            throw AudioModelError.modelLoadFailed(modelId: modelId, reason: "Incomplete staged Whisper bundle")
+        }
+        return try WhisperASRModel(modelId: modelId, modelFolder: directory,
+                                  runtime: WhisperCoreMLRuntime(modelFolder: directory))
+    }
+
+    static func hasCompleteCachedBundle(in directory: URL, requiresPrefill: Bool = true) -> Bool {
         let fileManager = FileManager.default
-        for relativePath in requiredBundleFiles {
+        for relativePath in requiredBundleFiles where requiresPrefill || !relativePath.hasPrefix("TextDecoderContextPrefill.") {
             let url = directory.appendingPathComponent(relativePath)
             guard fileManager.fileExists(atPath: url.path),
                   let attributes = try? fileManager.attributesOfItem(atPath: url.path),
