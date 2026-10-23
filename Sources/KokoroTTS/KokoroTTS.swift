@@ -66,9 +66,10 @@ public final class KokoroTTSModel {
 
     /// Synthesize speech from text.
     ///
-    /// Text longer than one pass of the fixed-capacity graph is split into
-    /// sentence-sized chunks (then clauses, then words), rendered one by one
-    /// and concatenated. A chunk whose speech would overrun the graph's
+    /// Text that fits one pass of the fixed-capacity graph renders in a single
+    /// call. Longer text, past 128 tokens or 5 s of speech, is split into
+    /// sentence-sized chunks (then clauses, then words) that are rendered one
+    /// by one and concatenated. A chunk whose speech would overrun the graph's
     /// output window is split again and rendered as two pieces.
     public func synthesize(
         text: String,
@@ -104,18 +105,32 @@ public final class KokoroTTSModel {
                 searchPath: "Available: \(available.joined(separator: ", "))...")
         }
 
-        // Packing measures many overlapping candidates; phonemize each once.
-        var tokenCounts: [String: Int] = [:]
-        let countTokens: (String) -> Int = { piece in
-            if let count = tokenCounts[piece] { return count }
-            let count = self.phonemizer.tokenize(piece, maxLength: .max, language: language).count
-            tokenCounts[piece] = count
-            return count
+        // Packing measures many overlapping candidates and rendering needs the
+        // ids of the pieces it kept; phonemize each piece of text once.
+        var tokenCache: [String: [Int]] = [:]
+        let tokenIds: (String) -> [Int] = { piece in
+            if let ids = tokenCache[piece] { return ids }
+            let ids = self.phonemizer.tokenize(piece, maxLength: .max, language: language)
+            tokenCache[piece] = ids
+            return ids
         }
+        let capacity = min(config.maxPhonemeLength, Self.inputSlots)
+
+        // Text that fits one pass renders exactly as it did before chunking
+        // existed: one call, one prosodic phrase. Only text the bounded graph
+        // cannot hold is split.
+        let whole = tokenIds(text)
+        if whole.count <= capacity {
+            let pass = try runModel(tokenIds: whole, network: network, style: styleVector, speed: speed)
+            if !pass.overran {
+                try onChunk(pass.audio, true)
+                return
+            }
+        }
+
         let chunks = KokoroTextChunker.chunk(
-            text, countTokens: countTokens, maxTokens: Self.chunkTokenBudget,
-            hardCapTokens: min(config.maxPhonemeLength, Self.inputSlots),
-            minTailTokens: Self.minTailTokens)
+            text, countTokens: { tokenIds($0).count }, maxTokens: Self.chunkTokenBudget,
+            hardCapTokens: capacity, minTailTokens: Self.minTailTokens)
 
         guard !chunks.isEmpty else {
             try onChunk([], true)
@@ -127,7 +142,7 @@ public final class KokoroTTSModel {
             // come back together, so the final piece is known when emitted.
             let pieces = try renderChunk(
                 chunk, network: network, style: styleVector, speed: speed,
-                language: language, countTokens: countTokens, depth: 0)
+                tokenIds: tokenIds, depth: 0)
             for (pieceIndex, var piece) in pieces.enumerated() {
                 // A short fade-in keeps the seam between pieces click-free.
                 if emitted { fadeIn(&piece) }
@@ -145,34 +160,33 @@ public final class KokoroTTSModel {
         network: KokoroNetwork,
         style: [Float],
         speed: Float,
-        language: String,
-        countTokens: (String) -> Int,
+        tokenIds: (String) -> [Int],
         depth: Int
     ) throws -> [[Float]] {
-        let tokenIds = phonemizer.tokenize(text, maxLength: .max, language: language)
+        let ids = tokenIds(text)
         let capacity = min(config.maxPhonemeLength, Self.inputSlots)
         var unsplit: [Float]?
-        if tokenIds.count <= capacity {
-            let pass = try runModel(tokenIds: tokenIds, network: network, style: style, speed: speed)
+        if ids.count <= capacity {
+            let pass = try runModel(tokenIds: ids, network: network, style: style, speed: speed)
             if !pass.overran { return [pass.audio] }
             unsplit = pass.audio
         }
-        if depth < Self.maxRetryDepth, tokenIds.count > Self.minRetryTokens * 2 {
+        if depth < Self.maxRetryDepth, ids.count > Self.minRetryTokens * 2 {
             let pieces = KokoroTextChunker.splitForRetry(
-                text, countTokens: countTokens,
-                minTokens: Self.minRetryTokens, maxTokens: tokenIds.count - 1)
+                text, countTokens: { tokenIds($0).count },
+                minTokens: Self.minRetryTokens, maxTokens: ids.count - 1)
             if pieces.count == 2 {
-                AudioLog.inference.info("Kokoro: splitting a \(tokenIds.count)-token chunk that overran the output window")
+                AudioLog.inference.info("Kokoro: splitting a \(ids.count)-token chunk that overran the output window")
                 return try pieces.flatMap {
                     try renderChunk(
                         $0, network: network, style: style, speed: speed,
-                        language: language, countTokens: countTokens, depth: depth + 1)
+                        tokenIds: tokenIds, depth: depth + 1)
                 }
             }
         }
         // No safe split exists: keep what one bounded pass produces.
         if let unsplit { return [unsplit] }
-        let clipped = Array(tokenIds.prefix(capacity - 1)) + [phonemizer.eosId]
+        let clipped = Array(ids.prefix(capacity - 1)) + [phonemizer.eosId]
         return [try runModel(tokenIds: clipped, network: network, style: style, speed: speed).audio]
     }
 

@@ -117,7 +117,7 @@ Each frame produces 600 audio samples at 24 kHz (25ms per frame).
 
 ## Long text
 
-The end-to-end graph takes 128 phoneme tokens and renders at most 5 s per pass, so `synthesize` splits longer text first, the same way speech-core does on Android:
+The end-to-end graph takes 128 phoneme tokens and renders at most 5 s per pass. Text that fits one pass renders in a single call, unchanged. Longer text is split the way speech-core splits it on Android:
 
 - Chunks are packed greedily up to 72 tokens, preferring sentence ends, then clause punctuation (`,` `;` `:`), then words, then characters for a single oversized word. Punctuation is a boundary only when whitespace or the end of the text follows it, so `3.5`, `1.000`, `z.B.` and `18:30` reach the phonemizer intact.
 - A last chunk under 12 tokens joins the previous one when the 128-token input allows it.

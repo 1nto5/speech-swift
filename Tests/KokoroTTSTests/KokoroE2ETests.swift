@@ -72,10 +72,26 @@ final class E2EKokoroTests: XCTestCase {
         XCTAssertTrue(transcription.contains("launch"), "The last sentence must be spoken")
     }
 
+    func testTextThatFitsOnePassStreamsAsOneChunk() async throws {
+        // Short text renders in one call, as it did before chunking existed.
+        let m = try await model()
+        var chunks: [AudioChunk] = []
+        for try await chunk in m.generateStream(text: "Hello there. How are you today?", language: "en") {
+            chunks.append(chunk)
+        }
+        XCTAssertEqual(chunks.count, 1)
+        XCTAssertEqual(chunks.first?.isFinal, true)
+        XCTAssertEqual(chunks.first?.frameIndex, 0)
+        XCTAssertGreaterThan(chunks.first?.samples.count ?? 0, 24000)
+    }
+
     func testStreamYieldsEachChunkAsItIsRendered() async throws {
+        // Well past one 5 s pass, so the text is split.
         let m = try await model()
         let text = "The first sentence is spoken right away. The second one follows right after it. "
-            + "And the third sentence closes the stream."
+            + "A third sentence keeps the stream going for a while longer. "
+            + "The fourth one adds a few more words to the paragraph. "
+            + "And the fifth sentence finally closes the stream."
         var chunks: [AudioChunk] = []
         for try await chunk in m.generateStream(text: text, language: "en") {
             chunks.append(chunk)
