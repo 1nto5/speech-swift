@@ -53,6 +53,13 @@ public final class Gemma4UnifiedChat: @unchecked Sendable {
         self.contextLength = contextLength
     }
 
+    static func prompt(messages: [Gemma4ConversationMessage], tools: [Gemma4Tool]) throws -> String {
+        var prompt = try Gemma4ToolCodec.prompt(messages: messages, tools: tools)
+        // Match the checkpoint's enable_thinking=false generation prefix.
+        if prompt.hasSuffix("<|turn>model\n") { prompt += "<|channel>thought\n<channel|>" }
+        return prompt
+    }
+
     public func generateResponse(
         messages: [Gemma4ConversationMessage], tools: [Gemma4Tool] = [],
         sampling: ChatSamplingConfig = .default,
@@ -66,7 +73,7 @@ public final class Gemma4UnifiedChat: @unchecked Sendable {
         guard (1...4096).contains(sampling.maxTokens) else {
             throw ChatModelError.inferenceFailed("maxTokens must be 1...4096")
         }
-        let prompt = try Gemma4ToolCodec.prompt(messages: messages, tools: tools)
+        let prompt = try Self.prompt(messages: messages, tools: tools)
         let tokens = tokenizer.encode(prompt)
         guard !tokens.isEmpty, tokens.count + sampling.maxTokens <= contextLength else {
             throw Gemma4ToolError.malformed("conversation exceeds the model context")

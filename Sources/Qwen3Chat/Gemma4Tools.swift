@@ -216,7 +216,15 @@ public enum Gemma4ToolCodec {
             guard body.hasPrefix("call:"), let brace = body.firstIndex(of: "{") else {
                 throw Gemma4ToolError.malformed("missing call name or arguments")
             }
-            let name = String(body.dropFirst(5).prefix(upTo: brace)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let renderedName = String(body.dropFirst(5).prefix(upTo: brace)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let name: String
+            if renderedName.hasPrefix(quote) || renderedName.hasPrefix("\"") {
+                var nameParser = Parser(renderedName)
+                guard case .string(let parsed) = try nameParser.parse() else {
+                    throw Gemma4ToolError.malformed("call name must be a string")
+                }
+                name = parsed
+            } else { name = renderedName }
             guard !name.isEmpty else { throw Gemma4ToolError.malformed("empty call name") }
             var parser = Parser(String(body[brace...]))
             let arguments = try parser.parse()

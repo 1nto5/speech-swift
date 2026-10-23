@@ -2,6 +2,14 @@ import XCTest
 @testable import Qwen3Chat
 
 final class Gemma4ToolsTests: XCTestCase {
+    func testQuotedFunctionNamesAreDecodedBeforeToolDispatch() throws {
+        for name in ["<|\"|>get_users<|\"|>", "\"get_users\""] {
+            let reply = try Gemma4ToolCodec.response("<|tool_call>call:\(name){}<tool_call|>")
+            XCTAssertEqual(reply.toolCalls.first?.name, "get_users")
+            XCTAssertEqual(reply.toolCalls.first?.arguments, .object([:]))
+        }
+        XCTAssertThrowsError(try Gemma4ToolCodec.response("<|tool_call>call:<|\"|>get_users{}<tool_call|>"))
+    }
     func testParsesNestedArgumentsWithoutTreatingStringPunctuationAsSyntax() throws {
         let response = try Gemma4ToolCodec.response("""
         <|channel>thought\nChoose a tool.\n<channel|>
