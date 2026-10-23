@@ -94,7 +94,8 @@ The service loads the tokenizer from `voxDirectory` and leaves its files
 unchanged. It needs no separate tokenizer cache.
 
 The service serializes chat, synthesis, and transcription across requests.
-Lightweight CoreML VAD runs separately. Gemma prefill uses batches of 256 tokens,
+Lightweight CoreML VAD runs separately. Gemma prefill evaluates each 256-token
+batch before starting the next,
 request-local KV state is released after generation, MLX's buffer cache is
 capped at 128 MiB, and its allocator limit is 20 GiB. Unused cached buffers are
 cleared between heavy requests. Whisper releases per-step CoreML temporaries

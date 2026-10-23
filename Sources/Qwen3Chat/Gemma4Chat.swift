@@ -254,18 +254,22 @@ public final class Gemma4Chat: @unchecked Sendable {
         // Prefill. Only the final position is sampled, so the lm_head runs on that row alone —
         // over a long prompt the discarded rows are gigabytes of 262k-wide logits.
         guard shouldContinue() else { return nil }
-        var logits: MLXArray!
+        var logits: MLXArray
         if let prefillChunkSize {
             resetState()
             let chunkSize = max(1, prefillChunkSize)
+            var chunkLogits: MLXArray?
             for offset in stride(from: 0, to: promptTokens.count, by: chunkSize) {
                 guard shouldContinue() else { return nil }
                 let end = min(offset + chunkSize, promptTokens.count)
                 let input = MLXArray(promptTokens[offset..<end].map { Int32($0) })
                     .expandedDimensions(axis: 0)
-                logits = model.lastTokenLogits(inputIds: input, state: &state)
-                eval(logits)
+                let value = model.lastTokenLogits(inputIds: input, state: &state)
+                eval(value)
+                chunkLogits = value
             }
+            guard let chunkLogits else { return nil }
+            logits = chunkLogits
         } else {
             logits = prefill(promptTokens, reusablePrefix: reusablePrefix)
         }
