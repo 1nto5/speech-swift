@@ -13,6 +13,30 @@ The implementation targets the text tower from Gemma 4 multimodal-style configs.
 
 ## Architecture
 
+### Gemma 4 12B Unified text model
+
+`Gemma4UnifiedChat` loads the 12B Unified text model through the pinned
+`mlx-swift-lm` implementation. It supports a local affine INT4 checkpoint with
+group size 64, 48 layers, and a hidden size of 3840. This model has no per-layer
+embeddings and shares the key/value projection in global-attention layers.
+
+```swift
+let chat = try Gemma4UnifiedChat.fromDirectory(
+    URL(fileURLWithPath: "/models/gemma-4-12B-it-4bit"))
+let reply = try chat.generateResponse(
+    messages: [.init(role: .user, content: "Hello")],
+    sampling: .init(temperature: 0, maxTokens: 128))
+```
+
+Native tool declarations, calls, and result history use `Gemma4Tool` and
+`Gemma4ConversationMessage`. Cancellation is cooperative. Prefill evaluates
+256-token batches and each request owns its KV cache. This interface provides
+buffered text/tool responses; it rejects constrained response formats. Vision
+and audio input use other modules and are outside this text interface.
+
+The following architecture and streaming sections describe `Gemma4Chat` for
+E2B and E4B.
+
 Gemma 4 text differs from Qwen-style dense chat models in several important ways:
 
 | Component | Gemma 4 behavior |
