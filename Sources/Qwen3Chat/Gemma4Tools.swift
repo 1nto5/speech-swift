@@ -232,7 +232,7 @@ public enum Gemma4ToolCodec {
             calls.append(.init(name: name, arguments: arguments))
             text.removeSubrange(start.lowerBound..<end.upperBound)
         }
-        for marker in ["<eos>", "<turn|>", "<|tool_response>", "<|think|>"] {
+        for marker in ["<eos>", "<turn|>", "<channel|>", "<|tool_response>", "<|think|>"] {
             text = text.replacingOccurrences(of: marker, with: "")
         }
         return .init(content: text.trimmingCharacters(in: .whitespacesAndNewlines), toolCalls: calls, generatedTokens: generatedTokens)

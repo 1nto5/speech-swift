@@ -28,6 +28,10 @@ final class E2EGemma4UnifiedTests: XCTestCase {
             tools: tools, sampling: sampling)
         XCTAssertTrue(result.toolCalls.isEmpty)
         XCTAssertTrue(result.content.lowercased().contains("record"), result.content)
+        for response in [reply, result] {
+            XCTAssertFalse(response.content.contains("<channel|>"), response.content)
+            XCTAssertFalse(response.content.contains("<|channel>"), response.content)
+        }
         let token = InferenceCancellationToken()
         token.cancel()
         XCTAssertThrowsError(try chat.generateResponse(messages: messages, cancellation: token))

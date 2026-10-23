@@ -9,7 +9,7 @@ Swift MLX backend for Gemma 4 text checkpoints in the `Qwen3Chat` module. The pu
 - `aufklarer/gemma-4-E4B-it-MLX-4bit`
 - `aufklarer/gemma-4-E2B-it-MLX-4bit`
 
-The implementation targets the text tower from Gemma 4 multimodal-style configs. It is a hand-written Swift port of the Gemma 4 text architecture, not a wrapper around `mlx-swift-lm`.
+`Gemma4Chat` implements the text tower from Gemma 4 multimodal-style configs in Swift. `Gemma4UnifiedChat` uses the pinned `mlx-swift-lm` implementation for 12B, as described below.
 
 ## Architecture
 
@@ -29,7 +29,9 @@ let reply = try chat.generateResponse(
 ```
 
 Native tool declarations, calls, and result history use `Gemma4Tool` and
-`Gemma4ConversationMessage`. Cancellation is cooperative. Prefill evaluates
+`Gemma4ConversationMessage`. Response parsing removes channel delimiters from
+returned text, including a closing marker generated after a tool result. Tool
+argument strings retain their original values. Cancellation is cooperative. Prefill evaluates
 256-token batches and each request owns its KV cache. This interface provides
 buffered text/tool responses; it rejects constrained response formats. Vision
 and audio input use other modules and are outside this text interface.
